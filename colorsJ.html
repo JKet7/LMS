@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Палитра курса — японская тема</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@300;400;500;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* ===== Шрифты ===== */
+    --font-body: 'M PLUS Rounded 1c', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+
+    /* ===== Светлая тема (день — храм) ===== */
+    --bg:            #F5F0E6;
+    --bg-soft:       #EBE4D4;
+    --text:          #1A1A1A;
+    --text-soft:     #4A4540;
+    --primary:       #0D5C4F;
+    --primary-soft:  #D4E4DF;
+    --secondary:     #8B1A2B;
+    --secondary-soft:#F0D8DC;
+    --success:       #2D6A4F;
+    --success-soft:  #D4E8DC;
+    --error:         #C83B3B;
+    --error-soft:    #F5D4D4;
+    --hover:         #E8DCC8;
+    --nav-current:   #2563EB;
+    --nav-current-soft:#DBEAFE;
+
+    --shadow-sm: 0 1px 2px rgba(43,43,43,.08);
+    --shadow-md: 0 4px 12px rgba(43,43,43,.10);
+    --shadow-lg: 0 10px 30px rgba(43,43,43,.14);
+  }
+
+  [data-theme="dark"] {
+    /* ===== Тёмная тема (ночь — освещённая пагода) ===== */
+    --bg:            #0D1416;
+    --bg-soft:       #1A2528;
+    --text:          #F5E6C8;
+    --text-soft:     #C9B896;
+    --primary:       #3A8A7A;
+    --primary-soft:  #1F3A35;
+    --secondary:     #D95A1A;
+    --secondary-soft:#3A2520;
+    --success:       #52B788;
+    --success-soft:  #1F3A2A;
+    --error:         #E63946;
+    --error-soft:    #3A1F22;
+    --hover:         #1F3A3A;
+    --nav-current:   #60A5FA;
+    --nav-current-soft:#1E2A3A;
+
+    --shadow-sm: 0 1px 2px rgba(0,0,0,.30);
+    --shadow-md: 0 4px 12px rgba(0,0,0,.40);
+    --shadow-lg: 0 10px 30px rgba(0,0,0,.50);
+  }
+
+  /* ===== Базовые стили ===== */
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: var(--font-body);
+    font-weight: 400;
+    background: var(--bg);
+    color: var(--text);
+    transition: background .25s, color .25s;
+    padding: 24px;
+    line-height: 1.6;
+    letter-spacing: 0.01em;
+  }
+  h1, h2, h3 {
+    font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+  h1 { margin-top: 0; font-size: 28px; }
+  h2 { margin-top: 36px; font-size: 22px; }
+  h3 { margin-top: 0; font-size: 15px; font-weight: 700; }
+  p { margin: 8px 0; }
+  code {
+    font-family: var(--font-mono);
+    background: var(--bg-soft);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: .88em;
+  }
+
+  .toolbar {
+    display: flex; gap: 12px; align-items: center;
+    margin-bottom: 20px; flex-wrap: wrap;
+  }
+  button {
+    font-family: var(--font-body);
+    font-weight: 500;
+    background: var(--primary); color: #fff;
+    border: none; padding: 8px 16px; border-radius: 6px;
+    cursor: pointer; font-size: 14px;
+    transition: opacity .15s;
+  }
+  button:hover { opacity: .9; }
+  button.secondary { background: var(--secondary); }
+  button.ghost     { background: transparent; color: var(--text); border: 1px solid var(--text-soft); }
+  button.danger    { background: var(--error); }
+  button.success   { background: var(--success); }
+
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+  th, td { padding: 10px 12px; border-bottom: 1px solid var(--bg-soft); text-align: left; vertical-align: middle; }
+  th { background: var(--bg-soft); font-weight: 600; }
+
+  .swatch {
+    width: 36px; height: 36px; border-radius: 6px;
+    border: 1px solid var(--text-soft); cursor: pointer;
+    display: inline-block; vertical-align: middle; margin-right: 8px;
+    transition: transform .15s;
+  }
+  .swatch:hover { transform: scale(1.08); }
+
+  .preview-grid {
+    display: grid; gap: 20px;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    margin-top: 16px;
+  }
+  .preview-card {
+    background: var(--bg-soft);
+    border: 1px solid var(--bg-soft);
+    border-radius: 12px;
+    padding: 18px;
+  }
+
+  .badge {
+    display: inline-block; padding: 4px 12px; border-radius: 14px;
+    font-size: 12px; font-weight: 500; margin: 2px;
+  }
+  .badge.theory    { background: var(--secondary-soft); color: var(--secondary); }
+  .badge.test      { background: var(--primary-soft);   color: var(--primary); }
+  .badge.correct   { background: var(--success-soft);   color: var(--success); }
+  .badge.wrong     { background: var(--error-soft);     color: var(--error); }
+  .badge.neutral   { background: var(--bg);             color: var(--text-soft); border: 1px solid var(--text-soft); }
+
+  .option {
+    display: block; padding: 10px 14px; margin: 6px 0;
+    border-radius: 8px; border: 1px solid var(--bg-soft);
+    background: var(--bg);
+    font-size: 14px;
+  }
+  .option.selected  { border-color: var(--primary); background: var(--primary-soft); }
+  .option.correct   { border-color: var(--success); background: var(--success-soft); }
+  .option.wrong     { border-color: var(--error);   background: var(--error-soft); }
+
+  /* ===== Сетка навигации теста ===== */
+  .nav-grid {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .nav-grid span {
+    width: 36px; height: 36px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--bg);
+    color: var(--text-soft);
+    font-size: 14px;
+    font-weight: 500;
+    border: 2px solid var(--bg-soft);
+    transition: all 0.2s;
+  }
+  .nav-grid span.current {
+    background: var(--nav-current);
+    color: #fff;
+    border-color: var(--nav-current);
+    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+  }
+  .nav-grid span.correct {
+    background: var(--success-soft);
+    color: var(--success);
+    border-color: var(--success);
+    font-weight: 700;
+  }
+  .nav-grid span.wrong {
+    background: var(--error-soft);
+    color: var(--error);
+    border-color: var(--error);
+    font-weight: 700;
+  }
+  .nav-grid span:hover:not(.current) {
+    border-color: var(--primary);
+    background: var(--primary-soft);
+  }
+
+  .progress {
+    height: 10px; background: var(--hover); border-radius: 5px; overflow: hidden;
+  }
+  .progress > div {
+    height: 100%; background: var(--primary); width: 65%;
+    border-radius: 5px;
+  }
+
+  .quote {
+    border-left: 4px solid var(--secondary);
+    background: var(--secondary-soft);
+    padding: 12px 16px; border-radius: 0 8px 8px 0;
+    font-size: 14px;
+  }
+
+  input[type="text"] {
+    font-family: var(--font-body);
+    width: 100%; padding: 10px 12px; border-radius: 6px;
+    border: 1px solid var(--bg-soft); background: var(--bg); color: var(--text);
+    font-size: 14px;
+  }
+  input[type="text"]:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--primary-soft);
+    border-color: var(--primary);
+  }
+
+  .status {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 12px; border-radius: 6px;
+    background: var(--bg-soft); font-size: 13px; font-weight: 500;
+  }
+  .status.ok    { background: var(--success-soft); color: var(--success); }
+  .status.warn  { background: var(--error-soft);   color: var(--error); }
+
+  /* ===== Аккордеон ===== */
+  .accordion {
+    border: 1px solid var(--bg-soft);
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--bg);
+    box-shadow: var(--shadow-sm);
+  }
+  .accordion-head {
+    padding: 12px 16px;
+    background: var(--bg-soft);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-weight: 500;
+  }
+  .accordion-bar {
+    width: 5px; height: 24px; border-radius: 3px;
+    background: var(--success);
+    flex-shrink: 0;
+  }
+  .accordion-title {
+    color: var(--text);
+    font-size: 14px;
+  }
+  .accordion-stats {
+    color: var(--text-soft);
+    font-size: 13px;
+    margin-left: auto;
+  }
+
+  .result-box {
+    border: 2px solid var(--success);
+    border-radius: 10px; padding: 16px;
+    background: var(--success-soft);
+  }
+  .result-box strong { display: block; margin-bottom: 4px; }
+
+  .media-error {
+    background: var(--error-soft); color: var(--error);
+    padding: 12px 16px; border-radius: 8px;
+    border-left: 4px solid var(--error);
+    font-size: 14px;
+  }
+
+  .hint {
+    background: var(--bg-soft); border-left: 4px solid var(--primary);
+    padding: 12px 16px; border-radius: 0 8px 8px 0;
+    margin-top: 20px;
+    font-size: 14px;
+  }
+
+  .jp-accent {
+    font-family: var(--font-body);
+    font-weight: 700;
+    letter-spacing: 0.05em;
+  }
+</style>
+</head>
+<body>
+
+<h1>🎌 Палитра курса — японская тема</h1>
+<p>Шрифт: <span class="jp-accent">M PLUS Rounded 1c</span>. Шпаргалка по цветам. Клик по плашке — открыть color picker. Меняй смело, при перезагрузке всё сбросится.</p>
+
+<div class="toolbar">
+  <button class="ghost" onclick="location.reload()">↻ Сбросить всё</button>
+  <button class="ghost" id="themeToggle">🌙 Тёмная</button>
+</div>
+
+<h2>📋 Все CSS-переменные</h2>
+<p>Слева — плашка. Кликни, чтобы поменять цвет (только для текущей темы). Справа — где эта переменная применяется.</p>
+
+<table id="varsTable">
+  <thead>
+    <tr><th>Цвет</th><th>Имя</th><th>Значение</th><th>Где применяется</th></tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<h2>🎨 Живые превью элементов</h2>
+<p>Как цвета собираются в реальные элементы интерфейса. Переключи тему сверху — увидишь разницу.</p>
+
+<div class="preview-grid">
+
+  <div class="preview-card">
+    <h3>Кнопки</h3>
+    <button>Главная</button>
+    <button class="secondary">Вторичная</button>
+    <button class="ghost">Текстовая</button>
+    <button class="danger">Удалить</button>
+    <button class="success">Проверить</button>
+  </div>
+
+  <div class="preview-card">
+    <h3>Бейджи</h3>
+    <span class="badge theory">Теория</span>
+    <span class="badge test">Тест</span>
+    <span class="badge correct">✓ верно</span>
+    <span class="badge wrong">✗ неверно</span>
+    <span class="badge neutral">Без группы</span>
+  </div>
+
+  <div class="preview-card">
+    <h3>Варианты ответа</h3>
+    <div class="option">Обычный вариант</div>
+    <div class="option selected">Выбранный</div>
+    <div class="option correct">Правильный</div>
+    <div class="option wrong">Неправильный</div>
+  </div>
+
+  <div class="preview-card">
+    <h3>Сетка навигации теста</h3>
+    <div class="nav-grid">
+      <span>1</span>
+      <span class="correct">2</span>
+      <span class="current">3</span>
+      <span class="wrong">4</span>
+      <span>5</span>
+    </div>
+    <p style="font-size:12px;color:var(--text-soft);margin-top:10px;">
+      Синий — текущий, зелёный — верно, красный — неверно. Рамки помогают различить.
+    </p>
+  </div>
+
+  <div class="preview-card">
+    <h3>Прогресс и таймер</h3>
+    <div class="progress"><div></div></div>
+    <p style="font-size:12px;color:var(--text-soft);">
+      Заливка — <code>--primary</code>, фон — <code>--hover</code>
+    </p>
+  </div>
+
+  <div class="preview-card">
+    <h3>Цитата / объяснение</h3>
+    <div class="quote">
+       Это блок с левой полосой. Фон — <code>--secondary-soft</code>, полоса — <code>--secondary</code>.
+    </div>
+  </div>
+
+  <div class="preview-card">
+    <h3>Инпуты</h3>
+    <input type="text" placeholder="Кликни — увидишь фокус с ring --primary-soft">
+  </div>
+
+  <div class="preview-card">
+    <h3>Статусные плашки</h3>
+    <span class="status">Продолжаем с черновика</span>
+    <span class="status ok">✓ Сохранено</span>
+    <span class="status warn">⚠ Ошибка</span>
+  </div>
+
+  <div class="preview-card">
+    <h3>Ответы в статистике</h3>
+    <div><span style="color:var(--text-soft)">○</span> Обычный</div>
+    <div><span style="color:var(--success)">✓</span> Ваш верный</div>
+    <div><span style="color:var(--error)">✗</span> Ваш неверный</div>
+  </div>
+
+  <div class="preview-card">
+    <h3>Группа (аккордеон)</h3>
+    <div class="accordion">
+      <div class="accordion-head">
+        <div class="accordion-bar"></div>
+        <span class="accordion-title">▶ AN/A3</span>
+        <span class="accordion-stats">4 · 75%</span>
+      </div>
+    </div>
+    <p style="font-size:12px;color:var(--text-soft);margin-top:10px;">
+      Цвет полосы задаётся из JS: <code>--success</code> ≥80%, <code>--primary</code> 50–79%, <code>--error</code> &lt;50%
+    </p>
+  </div>
+
+  <div class="preview-card">
+    <h3>Результат теста</h3>
+    <div class="result-box">
+      <strong>✓ Тест завершён!</strong>
+      4 / 5 правильно с первой попытки (80%)
+    </div>
+  </div>
+
+  <div class="preview-card">
+    <h3>Медиа: ошибка загрузки</h3>
+    <div class="media-error">
+      ⚠ Картинка не найдена: <code>images/foo.png</code>
+    </div>
+  </div>
+
+</div>
+
+<h2>🔒 Захардкоженные цвета</h2>
+<p>Эти цвета не через переменные. Они одинаковы в light и dark (либо переопределяются отдельным селектором). Если меняешь палитру — проверь их отдельно.</p>
+
+<table>
+  <tr>
+    <td><span class="swatch" style="background:#fff"></span><code>#fff</code></td>
+    <td>Белый текст на primary-кнопках<br>
+      <code>.btn-primary</code>, <code>.nav-btn.primary</code>, <code>.quiz-nav-btn.check</code>,
+      <code>.slide-link:hover</code>, <code>.slide-link.internal:hover</code>
+    </td>
+  </tr>
+  <tr>
+    <td><span class="swatch" style="background:#8B1A2B"></span><code>#8B1A2B</code></td>
+    <td>Бордовый текст бейджа теории<br>
+      <code>.menu-type-badge.theory</code> и <code>.slide-link</code> в light.
+      В dark переопределяется на <code>--secondary</code>.
+    </td>
+  </tr>
+  <tr>
+    <td><span class="swatch" style="background:#0D1416"></span><code>#0D1416</code></td>
+    <td>Тёмный фон под медиа<br>
+      <code>--media-bg</code> и <code>.media-preview img, video</code>
+    </td>
+  </tr>
+  <tr>
+    <td><span class="swatch" style="background:rgba(13,20,22,.55)"></span><code>rgba(13,20,22,.55)</code></td>
+    <td>Затемнение под модалкой предпросмотра<br>
+      <code>.pv-overlay</code> в админке. В dark не переопределено.
+    </td>
+  </tr>
+  <tr>
+    <td><span class="swatch" style="background:#2563EB"></span><code>#2563EB / #60A5FA</code></td>
+    <td>Синий «текущий» в навигации теста<br>
+      Через переменные <code>--nav-current</code> и <code>--nav-current-soft</code>. Смотри превью выше.
+    </td>
+  </tr>
+  <tr>
+    <td>Тени</td>
+    <td><code>rgba(43,43,43,…)</code> в light, <code>rgba(0,0,0,…)</code> в dark<br>
+      Задаются напрямую в <code>--shadow-sm/md/lg</code>, не через цветовые переменные.
+    </td>
+  </tr>
+</table>
+
+<h2>📝 Как применить подобранные цвета</h2>
+<ol>
+  <li>На этой странице подбери цвета кликами по плашкам. Убедись, что и в light, и в dark всё читаемо (переключай тему сверху).</li>
+  <li>Выпиши HEX-значения. Их надо будет вставить в двух файлах: <code>admin.html</code> и <code>index.html</code>.</li>
+  <li>В каждом файле найди блок <code>:root { … }</code> (ближе к началу <code>&lt;style&gt;</code>). Это светлая тема.</li>
+  <li>Ниже найди блок <code>[data-theme="dark"] { … }</code>. Это тёмная тема.</li>
+  <li>Замени значения нужных переменных. Например, было <code>--primary: #0D5C4F;</code> → стало <code>--primary: #0A4A40;</code>.</li>
+  <li>Не забудь добавить подключение шрифта в <code>&lt;head&gt;</code> обоих файлов (см. <code>&lt;link href="fonts.googleapis.com/..."&gt;</code> выше).</li>
+</ol>
+
+<div class="hint">
+  <strong>⚠️ Важно:</strong> в тёмной теме почти все цвета другие. Не копируй light-значения в dark — там должны быть более светлые/приглушённые оттенки, иначе будет резко и нечитаемо.
+  <br><br>
+  <strong>💡 Совет:</strong> меняй по одной переменной за раз и смотри на живые превью выше. Если что-то стало плохо видно — сразу заметишь.
+  <br><br>
+  <strong>🔤 Шрифт:</strong> M PLUS Rounded 1c округлый и дружелюбный. Для длинных статей может утомлять — если заметишь это на курсе, замени основной текст на <code>Inter</code>, а заголовки оставь японскими.
+</div>
+
+<p style="color:var(--text-soft);margin-top:30px;font-size:13px;">
+  Это одноразовая шпаргалка. На курс и на GitHub Pages она не влияет.
+</p>
+
+<script>
+  const vars = [
+    { name:'--bg',            light:'#F5F0E6', dark:'#0D1416', where:'Фон страницы, карточек' },
+    { name:'--bg-soft',       light:'#EBE4D4', dark:'#1A2528', where:'Фон превью-карточек, заголовков таблиц' },
+    { name:'--text',          light:'#1A1A1A', dark:'#F5E6C8', where:'Основной текст' },
+    { name:'--text-soft',     light:'#4A4540', dark:'#C9B896', where:'Второстепенный текст, подписи' },
+    { name:'--primary',       light:'#0D5C4F', dark:'#3A8A7A', where:'Главные кнопки, заливка прогресса, фокус инпута' },
+    { name:'--primary-soft',  light:'#D4E4DF', dark:'#1F3A35', where:'Фон выбранного варианта, ring инпута' },
+    { name:'--secondary',     light:'#8B1A2B', dark:'#D95A1A', where:'Левая полоса цитаты, бейдж «Теория»' },
+    { name:'--secondary-soft',light:'#F0D8DC', dark:'#3A2520', where:'Фон цитаты, бейджа теории' },
+    { name:'--success',       light:'#2D6A4F', dark:'#52B788', where:'Верный ответ, статус «Сохранено», полоса ≥80%' },
+    { name:'--success-soft',  light:'#D4E8DC', dark:'#1F3A2A', where:'Фон правильного варианта, блока результата' },
+    { name:'--error',         light:'#C83B3B', dark:'#E63946', where:'Неверный ответ, кнопка «Удалить», ошибка медиа' },
+    { name:'--error-soft',    light:'#F5D4D4', dark:'#3A1F22', where:'Фон неправильного варианта, статусной плашки ошибки' },
+    { name:'--hover',         light:'#E8DCC8', dark:'#1F3A3A', where:'Фон прогресс-бара, ховеры' },
+    { name:'--nav-current',   light:'#2563EB', dark:'#60A5FA', where:'Текущий вопрос в навигации теста' },
+    { name:'--nav-current-soft',light:'#DBEAFE',dark:'#1E2A3A',where:'Мягкий фон текущего вопроса (если нужен)' },
+  ];
+
+  const tbody = document.querySelector('#varsTable tbody');
+  const theme = () => document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+
+  function render() {
+    tbody.innerHTML = '';
+    const t = theme();
+    vars.forEach(v => {
+      const val = v[t];
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><span class="swatch" style="background:${val}" data-name="${v.name}"></span></td>
+        <td><code>${v.name}</code></td>
+        <td><code>${val}</code></td>
+        <td>${v.where}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+    tbody.querySelectorAll('.swatch').forEach(s => {
+      s.addEventListener('click', () => {
+        const input = document.createElement('input');
+        input.type = 'color';
+        input.value = s.style.background;
+        input.addEventListener('input', e => {
+          s.style.background = e.target.value;
+          const name = s.dataset.name;
+          document.documentElement.style.setProperty(name, e.target.value);
+          const row = s.closest('tr');
+          row.querySelector('td:nth-child(3) code').textContent = e.target.value;
+        });
+        input.click();
+      });
+    });
+  }
+
+  document.getElementById('themeToggle').addEventListener('click', e => {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    document.documentElement.setAttribute('data-theme', isDark ? '' : 'dark');
+    e.target.textContent = isDark ? '🌙 Тёмная' : '☀️ Светлая';
+    render();
+  });
+
+  render();
+</script>
+</body>
+</html>
