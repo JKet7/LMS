@@ -214,7 +214,15 @@
             transition: box-shadow .2s;
         }
         .card-body { padding: 32px 40px; }
-        @media (max-width: 600px) { .card-body { padding: 24px 20px; } }
+        @media (max-width: 600px) {
+            .card-body { padding: 24px 20px; }
+            .lesson-header { gap: 10px; }
+            .lesson-title { font-size: 16px; }
+            .header-right { gap: 6px; flex-wrap: wrap; }
+            .timer { font-size: 13px; padding: 4px 10px; }
+            .btn-icon { width: 36px; height: 36px; font-size: 16px; }
+            .btn-text { padding: 8px 10px; font-size: 13px; }
+        }
 
         .screen-header {
             display: flex;
@@ -664,7 +672,7 @@
         }
         .quiz-nav-btn.check:hover:not(:disabled) { filter: brightness(.9); }
 
-        /* ===== MATCH (соответствие) ===== */
+        /* ===== MATCH ===== */
         .match-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -733,7 +741,7 @@
             .match-item { padding: 10px 8px; font-size: 14px; min-height: 48px; }
         }
 
-        /* ===== CARD (карточка) ===== */
+        /* ===== CARD ===== */
         .card-view {
             max-width: 560px;
             margin: 0 auto;
@@ -992,7 +1000,7 @@
             display: block;
         }
 
-        /* ===== MEMO (памятки) ===== */
+        /* ===== MEMO ===== */
         .memo-screen-header {
             display: flex;
             justify-content: space-between;
@@ -1138,6 +1146,7 @@
         @media (max-width: 800px) {
             .lesson-layout, .quiz-layout { flex-direction: column; }
             .lesson-sidebar, .quiz-sidebar { width: 100%; position: static; order: -1; }
+            .lesson-main, .quiz-main { width: 100%; }
             .topic-list { flex-direction: row; flex-wrap: wrap; }
             .quiz-nav-grid { grid-template-columns: repeat(6, 1fr); }
             .group-row-bar { width: 60px; }
