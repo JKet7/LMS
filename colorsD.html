@@ -1,0 +1,1028 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Новая тёмная тема — подбор</title>
+
+<style>
+/* ===== Локальный шрифт ===== */
+@font-face {
+    font-family: 'M PLUS Rounded 1c';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('fonts/MPLUSRounded1c-Regular.ttf') format('truetype');
+}
+@font-face {
+    font-family: 'M PLUS Rounded 1c';
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url('fonts/MPLUSRounded1c-Medium.ttf') format('truetype');
+}
+@font-face {
+    font-family: 'M PLUS Rounded 1c';
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url('fonts/MPLUSRounded1c-Bold.ttf') format('truetype');
+}
+@font-face {
+    font-family: 'M PLUS Rounded 1c';
+    font-style: normal;
+    font-weight: 800;
+    font-display: swap;
+    src: url('fonts/MPLUSRounded1c-ExtraBold.ttf') format('truetype');
+}
+
+* { box-sizing: border-box; }
+
+body {
+    font-family: 'M PLUS Rounded 1c', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    background: #1a1a1a;
+    color: #e0e0e0;
+    margin: 0;
+    padding: 24px;
+    line-height: 1.6;
+}
+
+h1 { margin: 0 0 8px; font-size: 28px; color: #fff; font-weight: 700; }
+h2 { margin: 32px 0 12px; font-size: 20px; color: #fff; font-weight: 700; }
+h3 { margin: 24px 0 10px; font-size: 16px; color: #fff; font-weight: 700; }
+p { margin: 8px 0; font-size: 14px; color: #b0b0b0; }
+code {
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    background: #2a2a2a;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+    color: #fff;
+}
+
+.wrap { max-width: 1400px; margin: 0 auto; }
+
+.toolbar {
+    display: flex; gap: 10px; flex-wrap: wrap;
+    margin-bottom: 20px; padding: 16px 20px;
+    background: #222; border-radius: 12px;
+    border: 1px solid #333;
+    position: sticky; top: 12px; z-index: 10;
+}
+.toolbar button {
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 10px 20px;
+    border-radius: 100px;
+    cursor: pointer;
+    border: 1px solid #444;
+    background: #1a1a1a;
+    color: #e0e0e0;
+    transition: all .15s;
+}
+.toolbar button:hover { background: #333; border-color: #666; }
+.toolbar button.primary {
+    background: #8B1A1C; border-color: #8B1A1C; color: #fff;
+}
+.toolbar button.primary:hover { background: #6B0A0F; border-color: #6B0A0F; }
+
+.themes-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 32px;
+}
+@media (max-width: 900px) {
+    .themes-row { grid-template-columns: 1fr; }
+}
+
+.theme-panel {
+    border-radius: 16px;
+    padding: 24px;
+    border: 2px solid #333;
+    transition: all .3s;
+}
+.theme-panel.current {
+    background: #0D1416;
+    border-color: #444;
+}
+.theme-panel.proposed {
+    background: var(--proposed-bg, #0A0A0A);
+    border-color: var(--proposed-card-border, #2E2E2E);
+}
+.theme-panel-title {
+    font-size: 14px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin: 0 0 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #333;
+}
+.theme-panel.current .theme-panel-title { color: #A89A78; }
+.theme-panel.proposed .theme-panel-title { color: #8A8A8A; }
+
+.theme-panel p { color: inherit; }
+.theme-panel.current { color: #F5E6C8; }
+.theme-panel.proposed { color: var(--proposed-text, #F5F5F5); }
+
+/* ============================================================
+   ЖИВЫЕ ПРЕВЬЮ
+   ============================================================ */
+
+.demo-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 22px;
+    border-radius: 100px;
+    font-size: 14px;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    margin: 4px 4px 4px 0;
+    transition: all .15s;
+}
+
+/* --- ТЕКУЩАЯ ТЕМА (заливка) --- */
+.theme-panel.current .demo-btn-primary { background: #3A8A7A; color: #fff; border: none; }
+.theme-panel.current .demo-btn-outline {
+    background: transparent; color: #3A8A7A; border: 1px solid #2A3A3E;
+}
+.theme-panel.current .demo-btn-text { background: transparent; color: #A89A78; border: none; }
+.theme-panel.current .demo-btn-danger {
+    background: transparent; color: #E63946; border: 1px solid #E63946;
+}
+
+/* --- ПРЕДЛАГАЕМАЯ ТЕМА (без заливки, только рамка) --- */
+.theme-panel.proposed .demo-btn-primary {
+    background: transparent;
+    color: var(--proposed-primary, #15803D);
+    border: 2px solid var(--proposed-primary, #15803D);
+}
+.theme-panel.proposed .demo-btn-outline {
+    background: transparent;
+    color: var(--proposed-primary, #15803D);
+    border: 2px solid var(--proposed-border, #2E2E2E);
+}
+.theme-panel.proposed .demo-btn-text {
+    background: transparent;
+    color: var(--proposed-text-muted, #8A8A8A);
+    border: none;
+}
+.theme-panel.proposed .demo-btn-danger {
+    background: transparent;
+    color: var(--proposed-error, #DC2626);
+    border: 2px solid var(--proposed-error, #DC2626);
+}
+
+/* Кнопка "Завершить блок" / "Дальше" */
+.demo-nav-primary {
+    padding: 12px 28px;
+    border-radius: 100px;
+    font-size: 14px;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    margin: 4px 4px 4px 0;
+}
+.theme-panel.current .demo-nav-primary {
+    background: #3A8A7A; color: #fff; border: none;
+}
+.theme-panel.proposed .demo-nav-primary {
+    background: transparent;
+    color: var(--proposed-primary, #15803D);
+    border: 2px solid var(--proposed-primary, #15803D);
+}
+
+/* Сетка навигации теста */
+.demo-navgrid {
+    display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px;
+}
+.demo-navnum {
+    width: 40px; height: 40px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.theme-panel.current .demo-navnum {
+    border: 1px solid #2A3A3E;
+    background: transparent;
+    color: #A89A78;
+}
+.theme-panel.current .demo-navnum.correct { background: #1F3A2A; border-color: #52B788; color: #52B788; }
+.theme-panel.current .demo-navnum.wrong { background: #3A1F22; border-color: #E63946; color: #E63946; }
+.theme-panel.current .demo-navnum.current { border-color: #60A5FA; color: #60A5FA; }
+
+.theme-panel.proposed .demo-navnum {
+    border: 1px solid var(--proposed-border, #2E2E2E);
+    background: transparent;
+    color: var(--proposed-text-muted, #8A8A8A);
+}
+.theme-panel.proposed .demo-navnum.correct {
+    background: transparent;
+    border: 2px solid var(--proposed-success, #059669);
+    color: var(--proposed-success, #059669);
+}
+.theme-panel.proposed .demo-navnum.wrong {
+    background: transparent;
+    border: 2px solid var(--proposed-error, #DC2626);
+    color: var(--proposed-error, #DC2626);
+}
+.theme-panel.proposed .demo-navnum.current {
+    background: transparent;
+    border: 2px solid var(--proposed-memo-accent, #1E40AF);
+    color: var(--proposed-memo-accent, #1E40AF);
+    box-shadow: 0 0 0 2px rgba(30,64,175,.25);
+}
+
+/* Карточки */
+.demo-card {
+    border-radius: 12px;
+    padding: 20px;
+    margin: 12px 0;
+}
+.theme-panel.current .demo-card {
+    background: #152024;
+    border: 1px solid #2A3A3E;
+}
+.theme-panel.proposed .demo-card {
+    background: var(--proposed-card-bg, #111111);
+    border: 1px solid var(--proposed-card-border, #2E2E2E);
+}
+
+/* Бейджи */
+.demo-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    border-radius: 100px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    margin: 4px 4px 4px 0;
+}
+.theme-panel.current .demo-badge-theory { background: #3A2520; color: #D95A1A; }
+.theme-panel.proposed .demo-badge-theory { background: var(--proposed-secondary-soft, #2A0F0F); color: var(--proposed-secondary, #8B1A1C); }
+
+.theme-panel.current .demo-badge-quiz { background: #1F3A35; color: #3A8A7A; }
+.theme-panel.proposed .demo-badge-quiz { background: var(--proposed-primary-soft, #052E16); color: var(--proposed-primary, #15803D); }
+
+.theme-panel.current .demo-badge-memo { background: #1E2A3A; color: #6B8FC5; }
+.theme-panel.proposed .demo-badge-memo { background: var(--proposed-memo-accent-soft, #0F1A3A); color: var(--proposed-memo-accent, #1E40AF); }
+
+.theme-panel.current .demo-badge-success { background: #1F3A2A; color: #52B788; }
+.theme-panel.proposed .demo-badge-success { background: var(--proposed-success-bg, #052E16); color: var(--proposed-success, #059669); }
+
+.theme-panel.current .demo-badge-error { background: #3A1F22; color: #E63946; }
+.theme-panel.proposed .demo-badge-error { background: var(--proposed-error-bg, #2A0A0A); color: var(--proposed-error, #DC2626); }
+
+/* Варианты ответов — без заливки у предлагаемой */
+.demo-opt {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: inherit;
+    cursor: pointer;
+    margin-bottom: 6px;
+    transition: all .15s;
+}
+.theme-panel.current .demo-opt {
+    background: transparent;
+    border: 1px solid #2A3A3E;
+    color: #F5E6C8;
+}
+.theme-panel.current .demo-opt.selected { background: #1F3A35; border-color: #3A8A7A; color: #3A8A7A; }
+.theme-panel.current .demo-opt.correct { background: #1F3A2A; border-color: #52B788; color: #52B788; }
+.theme-panel.current .demo-opt.wrong { background: #3A1F22; border-color: #E63946; color: #E63946; }
+
+.theme-panel.proposed .demo-opt {
+    background: transparent;
+    border: 1px solid var(--proposed-border, #2E2E2E);
+    color: var(--proposed-text, #F5F5F5);
+}
+.theme-panel.proposed .demo-opt.selected {
+    background: transparent;
+    border: 2px solid var(--proposed-primary, #15803D);
+    color: var(--proposed-primary, #15803D);
+    font-weight: 500;
+}
+.theme-panel.proposed .demo-opt.correct {
+    background: transparent;
+    border: 2px solid var(--proposed-success, #059669);
+    color: var(--proposed-success, #059669);
+    font-weight: 500;
+}
+.theme-panel.proposed .demo-opt.wrong {
+    background: transparent;
+    border: 2px solid var(--proposed-error, #DC2626);
+    color: var(--proposed-error, #DC2626);
+}
+
+/* Карточка (flashcard) */
+.demo-card-face {
+    border-radius: 12px;
+    padding: 40px 20px;
+    text-align: center;
+    margin: 12px 0;
+    font-size: 24px;
+    font-weight: 700;
+}
+.theme-panel.current .demo-card-face {
+    background: #EBE4D4;
+    color: #1A1A1A;
+}
+.theme-panel.proposed .demo-card-face {
+    background: var(--proposed-card-face-bg, #1A1A1A);
+    color: var(--proposed-card-face-text, #FFFFFF);
+    border: 1px solid var(--proposed-card-face-border, #2E2E2E);
+}
+
+/* Цитата */
+.demo-quote {
+    padding: 14px 18px;
+    border-radius: 8px;
+    font-size: 14px;
+    line-height: 1.5;
+    margin: 12px 0;
+}
+.theme-panel.current .demo-quote {
+    background: #3A2520;
+    border-left: 4px solid #D95A1A;
+    color: #F5E6C8;
+}
+.theme-panel.proposed .demo-quote {
+    background: var(--proposed-secondary-soft, #2A0F0F);
+    border-left: 4px solid var(--proposed-secondary, #8B1A1C);
+    color: var(--proposed-text, #F5F5F5);
+}
+
+/* Таблица */
+.demo-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0;
+    font-size: 13px;
+}
+.theme-panel.current .demo-table td,
+.theme-panel.current .demo-table th {
+    padding: 8px 10px;
+    border: 1px solid #2A3A3E;
+    text-align: left;
+    color: #F5E6C8;
+}
+.theme-panel.current .demo-table th { background: #1A2528; font-weight: 700; }
+.theme-panel.proposed .demo-table td,
+.theme-panel.proposed .demo-table th {
+    padding: 8px 10px;
+    border: 1px solid var(--proposed-border, #2E2E2E);
+    text-align: left;
+    color: var(--proposed-text, #F5F5F5);
+}
+.theme-panel.proposed .demo-table th { background: var(--proposed-bg-soft, #141414); font-weight: 700; }
+
+/* Match */
+.demo-match-item {
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    text-align: center;
+    margin: 4px 0;
+}
+.theme-panel.current .demo-match-item {
+    border: 2px solid #2A3A3E;
+    background: #152024;
+    color: #F5E6C8;
+}
+.theme-panel.current .demo-match-item.matched {
+    border-color: #52B788;
+    background: #1F3A2A;
+    color: #52B788;
+}
+.theme-panel.proposed .demo-match-item {
+    border: 2px solid var(--proposed-border, #2E2E2E);
+    background: var(--proposed-card-bg, #111111);
+    color: var(--proposed-text, #F5F5F5);
+}
+.theme-panel.proposed .demo-match-item.matched {
+    border-color: var(--proposed-success, #059669);
+    background: transparent;
+    color: var(--proposed-success, #059669);
+}
+
+/* Заголовок ячейки памятки */
+.demo-memo-header {
+    padding: 12px 16px;
+    border-radius: 8px 8px 0 0;
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    color: #fff;
+}
+.theme-panel.current .demo-memo-header { background: #D95A1A; }
+.theme-panel.proposed .demo-memo-header { background: var(--proposed-secondary, #8B1A1C); }
+
+/* ============================================================
+   ТАБЛИЦА ПЕРЕМЕННЫХ
+   ============================================================ */
+
+.var-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #1a1a1a;
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 32px;
+}
+.var-table th {
+    text-align: left;
+    padding: 12px 14px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    color: #888;
+    background: #222;
+    border-bottom: 1px solid #333;
+    font-weight: 700;
+}
+.var-table td {
+    padding: 10px 14px;
+    border-bottom: 1px solid #2a2a2a;
+    vertical-align: middle;
+    font-size: 13px;
+    color: #d0d0d0;
+}
+.var-table tr:last-child td { border-bottom: none; }
+.var-table code { font-size: 12px; }
+
+.var-table .color-input {
+    width: 44px; height: 32px;
+    border: 1px solid #444;
+    border-radius: 6px;
+    cursor: pointer;
+    background: transparent;
+    padding: 0;
+}
+.var-table .color-input::-webkit-color-swatch-wrapper { padding: 2px; }
+.var-table .color-input::-webkit-color-swatch { border: none; border-radius: 4px; }
+
+.var-table .var-name { font-family: ui-monospace, Menlo, Consolas, monospace; color: #fff; font-weight: 600; }
+.var-table .var-old { color: #888; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+.var-table .var-new { color: #6EE7B7; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; font-weight: 600; }
+.var-table .var-where { color: #999; font-size: 12px; line-height: 1.4; }
+
+/* CSS-вывод */
+.css-output {
+    background: #0a0a0a;
+    border: 1px solid #333;
+    border-radius: 12px;
+    padding: 20px;
+    margin-top: 20px;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    color: #d0d0d0;
+    white-space: pre;
+    overflow-x: auto;
+    max-height: 600px;
+    overflow-y: auto;
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+<h1>🌑 Новая тёмная тема</h1>
+<p>Слева — как сейчас. Справа — предлагаемая. Меняй плашки, смотри превью. Кнопки в правой панели — <strong>без заливки, с рамкой</strong>. Когда всё понравится — нажми «Скопировать CSS-блок».</p>
+
+<div class="toolbar">
+    <button class="primary" onclick="copyCss()">📋 Скопировать CSS-блок</button>
+    <button onclick="resetAll()">↻ Сбросить к предложенному</button>
+    <span id="status" style="align-self:center; color:#6EE7B7; font-size:13px; margin-left:auto;"></span>
+</div>
+
+<div class="themes-row">
+
+    <div class="theme-panel current">
+        <div class="theme-panel-title">Текущая тёмная тема</div>
+        <p>Тёплые тона, кнопки с заливкой, приглушённые акценты.</p>
+
+        <div class="demo-card">
+            <h3>Кнопки</h3>
+            <button class="demo-btn demo-btn-primary">Главная</button>
+            <button class="demo-btn demo-btn-outline">Вторичная</button>
+            <button class="demo-btn demo-btn-text">Текстовая</button>
+            <button class="demo-btn demo-btn-danger">Удалить</button>
+        </div>
+
+        <div class="demo-card">
+            <h3>Кнопка «Завершить блок»</h3>
+            <button class="demo-nav-primary">Завершить блок</button>
+        </div>
+
+        <div class="demo-card">
+            <h3>Бейджи</h3>
+            <span class="demo-badge demo-badge-theory">Теория</span>
+            <span class="demo-badge demo-badge-quiz">Тест</span>
+            <span class="demo-badge demo-badge-memo">Памятка</span>
+            <span class="demo-badge demo-badge-success">✓ Верно</span>
+            <span class="demo-badge demo-badge-error">✗ Неверно</span>
+        </div>
+
+        <div class="demo-card">
+            <h3>Варианты ответов</h3>
+            <div class="demo-opt">Обычный</div>
+            <div class="demo-opt selected">Выбранный</div>
+            <div class="demo-opt correct">Правильный</div>
+            <div class="demo-opt wrong">Неправильный</div>
+        </div>
+
+        <div class="demo-card">
+            <h3>Сетка навигации теста</h3>
+            <div class="demo-navgrid">
+                <div class="demo-navnum">1</div>
+                <div class="demo-navnum correct">2</div>
+                <div class="demo-navnum wrong">3</div>
+                <div class="demo-navnum current">4</div>
+                <div class="demo-navnum">5</div>
+            </div>
+        </div>
+
+        <div class="demo-card">
+            <h3>Карточка (флеш-карта)</h3>
+            <div class="demo-card-face">nature</div>
+        </div>
+
+        <div class="demo-card">
+            <h3>Цитата / объяснение</h3>
+            <div class="demo-quote">💡 Цитата. Оранжевый акцент.</div>
+        </div>
+
+        <div class="demo-card">
+            <h3>Заголовок ячейки памятки</h3>
+            <div class="demo-memo-header">ЗАКОНОДАТЕЛЬСТВО</div>
+        </div>
+
+        <div class="demo-card">
+            <h3>Таблица</h3>
+            <table class="demo-table">
+                <tr><th>Столбец 1</th><th>Столбец 2</th></tr>
+                <tr><td>Значение</td><td>Значение</td></tr>
+            </table>
+        </div>
+
+        <div class="demo-card">
+            <h3>Match (соответствие)</h3>
+            <div class="demo-match-item">nature</div>
+            <div class="demo-match-item matched">природа</div>
+        </div>
+    </div>
+
+    <div class="theme-panel proposed" id="proposedPanel">
+        <div class="theme-panel-title">Предлагаемая тёмная тема</div>
+        <p>Глубокий чёрный, чистый белый, дорогие акценты, кнопки с рамкой.</p>
+
+        <div class="demo-card">
+            <h3>Кнопки</h3>
+            <button class="demo-btn demo-btn-primary">Главная</button>
+            <button class="demo-btn demo-btn-outline">Вторичная</button>
+            <button class="demo-btn demo-btn-text">Текстовая</button>
+            <button class="demo-btn demo-btn-danger">Удалить</button>
+        </div>
+
+        <div class="demo-card">
+            <h3>Кнопка «Завершить блок»</h3>
+            <button class="demo-nav-primary">Завершить блок</button>
+        </div>
+
+        <div class="demo-card">
+            <h3>Бейджи</h3>
+            <span class="demo-badge demo-badge-theory">Теория</span>
+            <span class="demo-badge demo-badge-quiz">Тест</span>
+            <span class="demo-badge demo-badge-memo">Памятка</span>
+            <span class="demo-badge demo-badge-success">✓ Верно</span>
+            <span class="demo-badge demo-badge-error">✗ Неверно</span>
+        </div>
+
+        <div class="demo-card">
+            <h3>Варианты ответов</h3>
+            <div class="demo-opt">Обычный</div>
+            <div class="demo-opt selected">Выбранный</div>
+            <div class="demo-opt correct">Правильный</div>
+            <div class="demo-opt wrong">Неправильный</div>
+        </div>
+
+        <div class="demo-card">
+            <h3>Сетка навигации теста</h3>
+            <div class="demo-navgrid">
+                <div class="demo-navnum">1</div>
+                <div class="demo-navnum correct">2</div>
+                <div class="demo-navnum wrong">3</div>
+                <div class="demo-navnum current">4</div>
+                <div class="demo-navnum">5</div>
+            </div>
+        </div>
+
+        <div class="demo-card">
+            <h3>Карточка (флеш-карта)</h3>
+            <div class="demo-card-face">nature</div>
+        </div>
+
+        <div class="demo-card">
+            <h3>Цитата / объяснение</h3>
+            <div class="demo-quote">💡 Цитата. Кроваво-бордовый акцент.</div>
+        </div>
+
+        <div class="demo-card">
+            <h3>Заголовок ячейки памятки</h3>
+            <div class="demo-memo-header">ЗАКОНОДАТЕЛЬСТВО</div>
+        </div>
+
+        <div class="demo-card">
+            <h3>Таблица</h3>
+            <table class="demo-table">
+                <tr><th>Столбец 1</th><th>Столбец 2</th></tr>
+                <tr><td>Значение</td><td>Значение</td></tr>
+            </table>
+        </div>
+
+        <div class="demo-card">
+            <h3>Match (соответствие)</h3>
+            <div class="demo-match-item">nature</div>
+            <div class="demo-match-item matched">природа</div>
+        </div>
+    </div>
+
+</div>
+
+<h2>📋 Переменные — сравнение</h2>
+<p>Слева плашка — новая. Кликни, чтобы поменять. Справа — где применяется.</p>
+
+<table class="var-table">
+    <thead>
+        <tr>
+            <th style="width:60px;">Цвет</th>
+            <th style="width:200px;">Имя</th>
+            <th style="width:180px;">Было → Стало</th>
+            <th>Где применяется</th>
+        </tr>
+    </thead>
+    <tbody id="varTbody"></tbody>
+</table>
+
+<h2>📄 Готовый CSS для вставки</h2>
+<p>Два блока: первый — <strong>заменить</strong> старый <code>[data-theme="dark"] { ... }</code>. Второй — <strong>добавить в конец</strong> <code>admin.css</code> и <code>index.css</code> (один раз). Кнопка «📋 Скопировать CSS-блок» копирует <strong>оба</strong> блока разом.</p>
+
+<div class="css-output" id="cssOutput"></div>
+
+</div>
+
+<script>
+// ============================================================
+// Переменные: [имя, значение ТЕКУЩЕЕ, значение НОВОЕ, где применяется]
+// ============================================================
+const VARS = [
+    // Фоны
+    ["--bg",                    "#0D1416", "#0A0A0A", "Главный фон страницы"],
+    ["--bg-soft",               "#1A2528", "#141414", "Мягкий фон (превью, ячейки)"],
+    ["--card-bg",               "#152024", "#111111", "Фон карточек, форм, меню"],
+    ["--card-border",           "#2A3A3E", "#2E2E2E", "Границы карточек"],
+    // Текст
+    ["--text",                  "#F5E6C8", "#F5F5F5", "Основной текст"],
+    ["--text-strong",           "#FFF5DC", "#FFFFFF", "Заголовки"],
+    ["--text-muted",            "#A89A78", "#8A8A8A", "Второстепенный текст, подписи"],
+    ["--text-disabled",         "#6B6256", "#4A4A4A", "Задизейбленный текст"],
+    ["--text-soft",             "#C9B896", "#B0B0B0", "Алиас text-muted"],
+    // Зелёный (primary)
+    ["--primary",               "#3A8A7A", "#15803D", "Главный акцент: primary-кнопки, тесты, прогресс"],
+    ["--primary-hover",         "#4A9E8C", "#166534", "Ховер primary-кнопок"],
+    ["--primary-soft",          "#1F3A35", "#052E16", "Мягкий фон primary"],
+    // КРАСНЫЙ (secondary) — теперь кроваво-бордовый
+    ["--secondary",             "#D95A1A", "#8B1A1C", "Теория, цитаты, акцентные заголовки памяток"],
+    ["--secondary-soft",        "#3A2520", "#2A0F0F", "Мягкий фон secondary"],
+    // Success
+    ["--success",               "#52B788", "#059669", "Правильный ответ"],
+    ["--success-bg",            "#1F3A2A", "#052E16", "Фон правильного ответа"],
+    ["--success-soft",          "#1F3A2A", "#052E16", "Алиас success-bg"],
+    ["--success-border",        "#52B788", "#059669", "Границы правильного"],
+    // Error
+    ["--error",                 "#E63946", "#DC2626", "Неправильный ответ"],
+    ["--error-bg",              "#3A1F22", "#2A0A0A", "Фон неправильного"],
+    ["--error-soft",            "#3A1F22", "#2A0A0A", "Алиас error-bg"],
+    ["--error-border",          "#E63946", "#DC2626", "Границы неправильного"],
+    // Warning — тоже кроваво-бордовый
+    ["--warning-bg",            "#3A2520", "#2A0F0F", "Фон предупреждений"],
+    ["--warning-text",          "#D95A1A", "#8B1A1C", "Текст предупреждений"],
+    // Границы и ховеры
+    ["--border",                "#2A3A3E", "#2E2E2E", "Основные границы элементов"],
+    ["--hover",                 "#1F3A3A", "#1A1A1A", "Фон при наведении"],
+    ["--hover-strong",          "#2A4A4A", "#262626", "Более сильный ховер"],
+    // Инпуты
+    ["--input-bg",              "#1A2528", "#141414", "Фон полей ввода"],
+    ["--input-bg-focus",        "#152024", "#1A1A1A", "Фон поля в фокусе"],
+    // Топбар
+    ["--topbar-bg",             "#152024", "#111111", "Фон топбара админки"],
+    ["--topbar-text",           "#F5E6C8", "#F5F5F5", "Текст топбара"],
+    ["--topbar-border",         "#2A3A3E", "#2E2E2E", "Нижняя граница топбара"],
+    // Медиа и карточки
+    ["--media-bg",              "#000000", "#000000", "Фон под видео"],
+    ["--card-face-bg",          "#EBE4D4", "#1A1A1A", "Фон карточек в тестах и памятках"],
+    ["--card-face-text",        "#1A1A1A", "#FFFFFF", "Текст на карточках"],
+    ["--placeholder-bg",        "#1A2528", "#141414", "Фон заглушек"],
+    ["--placeholder-border",    "#2A3A3E", "#2E2E2E", "Границы заглушек"],
+    ["--placeholder-text",      "#6B6256", "#4A4A4A", "Текст заглушек"],
+    // Синий — памятки и навигация
+    ["--memo-accent",           "#6B8FC5", "#1E40AF", "Бейдж и левый край карточки памятки"],
+    ["--memo-accent-soft",      "#1E2A3A", "#0F1A3A", "Мягкий фон памяток"],
+    ["--nav-current",           "#60A5FA", "#1E40AF", "Текущий номер в навигации теста"],
+    ["--nav-current-soft",      "rgba(96,165,250,.25)", "rgba(30,64,175,.25)", "Мягкий фон текущего номера"]
+];
+
+const DEFAULT_VALUES = {};
+VARS.forEach(v => { DEFAULT_VALUES[v[0]] = v[2]; });
+
+let currentValues = {};
+(function loadState() {
+    try {
+        const saved = localStorage.getItem("kp_colors_draft_v2");
+        if (saved) {
+            const parsed = JSON.parse(saved);
+            VARS.forEach(v => {
+                currentValues[v[0]] = parsed[v[0]] || v[2];
+            });
+            return;
+        }
+    } catch (e) {}
+    VARS.forEach(v => { currentValues[v[0]] = v[2]; });
+})();
+
+function saveState() {
+    try { localStorage.setItem("kp_colors_draft_v2", JSON.stringify(currentValues)); } catch(e){}
+}
+
+function toHex(color) {
+    if (!color) return "#000000";
+    color = String(color).trim();
+    if (/^#[0-9a-fA-F]{6}$/.test(color)) return color.toLowerCase();
+    if (/^#[0-9a-fA-F]{3}$/.test(color)) {
+        return ("#" + color[1] + color[1] + color[2] + color[2] + color[3] + color[3]).toLowerCase();
+    }
+    const m = color.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+    if (m) {
+        const r = parseInt(m[1], 10), g = parseInt(m[2], 10), b = parseInt(m[3], 10);
+        return "#" + [r, g, b].map(x => x.toString(16).padStart(2, "0")).join("");
+    }
+    return "#000000";
+}
+
+function applyAll() {
+    const panel = document.getElementById("proposedPanel");
+    if (!panel) return;
+    const map = {
+        "--proposed-bg": "--bg",
+        "--proposed-bg-soft": "--bg-soft",
+        "--proposed-card-bg": "--card-bg",
+        "--proposed-card-border": "--card-border",
+        "--proposed-text": "--text",
+        "--proposed-text-strong": "--text-strong",
+        "--proposed-text-muted": "--text-muted",
+        "--proposed-border": "--border",
+        "--proposed-primary": "--primary",
+        "--proposed-primary-soft": "--primary-soft",
+        "--proposed-secondary": "--secondary",
+        "--proposed-secondary-soft": "--secondary-soft",
+        "--proposed-success": "--success",
+        "--proposed-success-bg": "--success-bg",
+        "--proposed-error": "--error",
+        "--proposed-error-bg": "--error-bg",
+        "--proposed-memo-accent": "--memo-accent",
+        "--proposed-memo-accent-soft": "--memo-accent-soft",
+        "--proposed-card-face-bg": "--card-face-bg",
+        "--proposed-card-face-text": "--card-face-text",
+        "--proposed-card-face-border": "--card-border"
+    };
+    for (const prop in map) {
+        const varName = map[prop];
+        if (currentValues[varName] !== undefined) {
+            panel.style.setProperty(prop, currentValues[varName]);
+        }
+    }
+}
+
+function renderTable() {
+    const tbody = document.getElementById("varTbody");
+    tbody.innerHTML = "";
+    VARS.forEach(v => {
+        const [name, oldVal, defaultNew, where] = v;
+        const newVal = currentValues[name];
+        const tr = document.createElement("tr");
+
+        const tdColor = document.createElement("td");
+        const inp = document.createElement("input");
+        inp.type = "color";
+        inp.className = "color-input";
+        inp.value = toHex(newVal);
+        inp.addEventListener("input", () => {
+            currentValues[name] = inp.value;
+            applyAll();
+            saveState();
+            renderCssOutput();
+            const newCell = tr.querySelector(".var-new");
+            if (newCell) newCell.textContent = inp.value;
+        });
+        tdColor.appendChild(inp);
+        tr.appendChild(tdColor);
+
+        const tdName = document.createElement("td");
+        tdName.innerHTML = `<span class="var-name">${name}</span>`;
+        tr.appendChild(tdName);
+
+        const tdVal = document.createElement("td");
+        tdVal.innerHTML = `<span class="var-old">${oldVal}</span> <span style="color:#666;">→</span> <span class="var-new">${newVal}</span>`;
+        tr.appendChild(tdVal);
+
+        const tdWhere = document.createElement("td");
+        tdWhere.className = "var-where";
+        tdWhere.textContent = where;
+        tr.appendChild(tdWhere);
+
+        tbody.appendChild(tr);
+    });
+}
+
+function renderCssOutput() {
+    const out = document.getElementById("cssOutput");
+    const lines = [];
+
+    lines.push("/* ============================================================");
+    lines.push("   ЧАСТЬ 1 — ТЁМНАЯ ТЕМА");
+    lines.push("   Замени этим блоком старый [data-theme=\"dark\"] { ... }");
+    lines.push("   в файлах admin.css и index.css");
+    lines.push("   ============================================================ */");
+    lines.push("");
+    lines.push("[data-theme=\"dark\"] {");
+    VARS.forEach(v => {
+        const name = v[0];
+        const val = currentValues[name];
+        lines.push("    " + name + ": " + val + ";");
+    });
+    lines.push("}");
+    lines.push("");
+
+    lines.push("/* ============================================================");
+    lines.push("   ЧАСТЬ 2 — ПРОЗРАЧНЫЕ КНОПКИ");
+    lines.push("   Добавь этот блок В КОНЕЦ файла admin.css и index.css");
+    lines.push("   (один раз, после остальных стилей).");
+    lines.push("   ============================================================ */");
+    lines.push("");
+    lines.push("/* --- Основная кнопка (.btn-primary) --- */");
+    lines.push(".btn-primary {");
+    lines.push("    background: transparent;");
+    lines.push("    color: var(--primary);");
+    lines.push("    border: 2px solid var(--primary);");
+    lines.push("}");
+    lines.push(".btn-primary:hover {");
+    lines.push("    background: var(--primary);");
+    lines.push("    color: #fff;");
+    lines.push("}");
+    lines.push("");
+    lines.push("/* --- Кнопка «Завершить блок» / «Дальше» (.nav-btn.primary) --- */");
+    lines.push(".nav-btn.primary {");
+    lines.push("    background: transparent;");
+    lines.push("    color: var(--primary);");
+    lines.push("    border-color: var(--primary);");
+    lines.push("    border-width: 2px;");
+    lines.push("}");
+    lines.push(".nav-btn.primary:hover:not(:disabled) {");
+    lines.push("    background: var(--primary);");
+    lines.push("    color: #fff;");
+    lines.push("    border-color: var(--primary);");
+    lines.push("}");
+    lines.push("");
+    lines.push("/* --- Кнопка «Дальше» в тесте (.quiz-nav-btn.primary) --- */");
+    lines.push(".quiz-nav-btn.primary {");
+    lines.push("    background: transparent;");
+    lines.push("    color: var(--primary);");
+    lines.push("    border-color: var(--primary);");
+    lines.push("    border-width: 2px;");
+    lines.push("}");
+    lines.push(".quiz-nav-btn.primary:hover:not(:disabled) {");
+    lines.push("    background: var(--primary);");
+    lines.push("    color: #fff;");
+    lines.push("    border-color: var(--primary);");
+    lines.push("}");
+    lines.push("");
+    lines.push("/* --- Кнопка «Проверить» (.quiz-nav-btn.check) --- */");
+    lines.push(".quiz-nav-btn.check {");
+    lines.push("    background: transparent;");
+    lines.push("    color: var(--success);");
+    lines.push("    border-color: var(--success);");
+    lines.push("    border-width: 2px;");
+    lines.push("}");
+    lines.push(".quiz-nav-btn.check:hover:not(:disabled) {");
+    lines.push("    background: var(--success);");
+    lines.push("    color: #fff;");
+    lines.push("}");
+    lines.push("");
+    lines.push("/* --- Варианты ответов в тесте (без заливки) --- */");
+    lines.push(".quiz-opt.selected {");
+    lines.push("    background: transparent;");
+    lines.push("    border: 2px solid var(--primary);");
+    lines.push("    color: var(--primary);");
+    lines.push("    font-weight: 500;");
+    lines.push("}");
+    lines.push(".quiz-opt.correct {");
+    lines.push("    background: transparent;");
+    lines.push("    border: 2px solid var(--success);");
+    lines.push("    color: var(--success);");
+    lines.push("    font-weight: 500;");
+    lines.push("}");
+    lines.push(".quiz-opt.wrong {");
+    lines.push("    background: transparent;");
+    lines.push("    border: 2px solid var(--error);");
+    lines.push("    color: var(--error);");
+    lines.push("}");
+    lines.push("");
+    lines.push("/* --- Сетка навигации теста (без заливки) --- */");
+    lines.push(".quiz-nav-num.correct {");
+    lines.push("    background: transparent;");
+    lines.push("    border: 2px solid var(--success);");
+    lines.push("    color: var(--success);");
+    lines.push("}");
+    lines.push(".quiz-nav-num.wrong {");
+    lines.push("    background: transparent;");
+    lines.push("    border: 2px solid var(--error);");
+    lines.push("    color: var(--error);");
+    lines.push("}");
+    lines.push("");
+    lines.push("/* --- Match: выбранный и соединённый (без заливки) --- */");
+    lines.push(".match-item.selected {");
+    lines.push("    border-color: var(--nav-current);");
+    lines.push("    border-width: 2px;");
+    lines.push("    background: transparent;");
+    lines.push("    color: var(--nav-current);");
+    lines.push("    font-weight: 700;");
+    lines.push("}");
+    lines.push(".match-item.matched {");
+    lines.push("    border-color: var(--success);");
+    lines.push("    border-width: 2px;");
+    lines.push("    background: transparent;");
+    lines.push("    color: var(--success);");
+    lines.push("    cursor: default;");
+    lines.push("    font-weight: 700;");
+    lines.push("}");
+
+    out.textContent = lines.join("\n");
+}
+
+function copyCss() {
+    const text = document.getElementById("cssOutput").textContent;
+    navigator.clipboard.writeText(text).then(() => {
+        showStatus("✓ CSS скопирован в буфер обмена");
+    }).catch(() => {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand("copy"); showStatus("✓ CSS скопирован"); }
+        catch(e) { showStatus("⚠ Не удалось скопировать. Выдели вручную."); }
+        document.body.removeChild(ta);
+    });
+}
+
+function resetAll() {
+    if (!confirm("Сбросить все изменения к предложенному варианту?")) return;
+    VARS.forEach(v => { currentValues[v[0]] = v[2]; });
+    saveState();
+    renderTable();
+    applyAll();
+    renderCssOutput();
+    showStatus("↻ Сброшено к предложенному");
+}
+
+function showStatus(msg) {
+    const el = document.getElementById("status");
+    el.textContent = msg;
+    clearTimeout(el._t);
+    el._t = setTimeout(() => { el.textContent = ""; }, 3000);
+}
+
+renderTable();
+applyAll();
+renderCssOutput();
+</script>
+
+</body>
+</html>
