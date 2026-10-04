@@ -1,111 +1,345 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title id="page-title">Курс</title>
-    <script>
-        // Anti-FOUC: применяем тему до первой отрисовки
-        (function() {
-            try {
-                var t = localStorage.getItem("kp_course_theme");
-                if (t === "dark" || t === "light") {
-                    document.documentElement.setAttribute("data-theme", t);
-                } else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
-                    document.documentElement.setAttribute("data-theme", "dark");
-                }
-            } catch (e) {}
-        })();
-    </script>
-    <link rel="stylesheet" href="index.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Конструктор курсов</title>
+
+<script>
+// Anti-FOUC: применяем тему до первой отрисовки
+(function() {
+    try {
+        var t = localStorage.getItem("kp_aggregator_theme");
+        if (t === "dark" || t === "light") {
+            document.documentElement.setAttribute("data-theme", t);
+        } else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+            document.documentElement.setAttribute("data-theme", "dark");
+        }
+    } catch (e) {}
+})();
+</script>
+
+<style>
+/* ===== Шрифт ===== */
+@font-face {
+    font-family: 'M PLUS Rounded 1c';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('_source/fonts/MPLUSRounded1c-Regular.ttf') format('truetype');
+}
+@font-face {
+    font-family: 'M PLUS Rounded 1c';
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url('_source/fonts/MPLUSRounded1c-Medium.ttf') format('truetype');
+}
+@font-face {
+    font-family: 'M PLUS Rounded 1c';
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url('_source/fonts/MPLUSRounded1c-Bold.ttf') format('truetype');
+}
+@font-face {
+    font-family: 'M PLUS Rounded 1c';
+    font-style: normal;
+    font-weight: 800;
+    font-display: swap;
+    src: url('_source/fonts/MPLUSRounded1c-ExtraBold.ttf') format('truetype');
+}
+
+/* ===== Переменные тем ===== */
+:root {
+    --font-body: 'M PLUS Rounded 1c', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+
+    --bg: #F5F0E6;
+    --card-bg: #FFFFFF;
+    --card-border: #E5E0D0;
+    --card-shadow: 0 1px 3px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.04);
+    --card-shadow-hover: 0 4px 12px rgba(0,0,0,.08), 0 12px 24px rgba(0,0,0,.06);
+
+    --text: #1A1A1A;
+    --text-strong: #000000;
+    --text-muted: #6B6256;
+
+    --primary: #0D5C4F;
+    --primary-hover: #0A4A40;
+
+    --border: #D8CEB8;
+    --hover: rgba(0,0,0,.05);
+}
+[data-theme="dark"] {
+    --bg: #0A0A0A;
+    --card-bg: #111111;
+    --card-border: #2E2E2E;
+    --card-shadow: 0 1px 3px rgba(0,0,0,.4), 0 4px 12px rgba(0,0,0,.3);
+    --card-shadow-hover: 0 4px 12px rgba(0,0,0,.5), 0 12px 24px rgba(0,0,0,.4);
+
+    --text: #F5F5F5;
+    --text-strong: #FFFFFF;
+    --text-muted: #8A8A8A;
+
+    --primary: #15803D;
+    --primary-hover: #166534;
+
+    --border: #2E2E2E;
+    --hover: rgba(255,255,255,.08);
+}
+
+* { box-sizing: border-box; }
+
+body {
+    font-family: var(--font-body);
+    font-weight: 400;
+    margin: 0;
+    padding: 48px 24px 80px;
+    background: var(--bg);
+    color: var(--text);
+    transition: background-color .25s, color .25s;
+    -webkit-font-smoothing: antialiased;
+    letter-spacing: 0.01em;
+    line-height: 1.6;
+    min-height: 100vh;
+}
+
+/* ===== Шапка ===== */
+.top {
+    max-width: 1200px;
+    margin: 0 auto 48px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+.top-title {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text-strong);
+    margin: 0;
+    letter-spacing: -.3px;
+}
+.btn-icon {
+    width: 42px;
+    height: 42px;
+    padding: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-muted);
+    border: none;
+    cursor: pointer;
+    font-size: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all .15s;
+    font-family: inherit;
+}
+.btn-icon:hover { background: var(--hover); color: var(--text); }
+
+/* ===== Сетка карточек ===== */
+.grid {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 24px;
+}
+@media (max-width: 1100px) {
+    .grid { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 800px) {
+    .grid { grid-template-columns: repeat(2, 1fr); gap: 16px; }
+}
+@media (max-width: 500px) {
+    .grid { grid-template-columns: 1fr; }
+    body { padding: 32px 16px 60px; }
+    .top { margin-bottom: 32px; }
+    .top-title { font-size: 22px; }
+}
+
+/* ===== Карточка ===== */
+.course-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    box-shadow: var(--card-shadow);
+    padding: 32px 24px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    transition: all .2s;
+    text-decoration: none;
+    color: inherit;
+    min-height: 180px;
+}
+.course-card:hover {
+    box-shadow: var(--card-shadow-hover);
+    transform: translateY(-2px);
+    border-color: var(--primary);
+}
+
+.course-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-strong);
+    margin: 0 0 24px;
+    line-height: 1.4;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.course-link {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--primary);
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    width: 100%;
+    transition: color .15s;
+}
+.course-card:hover .course-link {
+    color: var(--primary-hover);
+}
+
+/* ===== Пустое состояние ===== */
+.empty {
+    max-width: 600px;
+    margin: 80px auto;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 15px;
+    line-height: 1.6;
+}
+.empty-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-strong);
+    margin: 0 0 12px;
+}
+.empty-hint {
+    font-size: 13px;
+    color: var(--text-muted);
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-top: 20px;
+    text-align: left;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    line-height: 1.7;
+}
+.empty-hint code {
+    background: var(--hover);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+}
+</style>
 </head>
 <body>
 
-<div class="app-container" id="app-container">
-
-    <div class="screen active" id="screen-menu">
-        <div class="screen-header">
-            <div>
-                <h1 class="screen-title" id="course-title" ondblclick="openAdmin()">Курс</h1>
-                <p class="screen-subtitle">Выбери блок и изучай теорию, проходи тесты или открывай памятки</p>
-            </div>
-            <button class="btn-icon" onclick="toggleTheme()" title="Сменить тему">🌙</button>
-        </div>
-        <div class="menu-list" id="menu-list"></div>
-    </div>
-
-    <div class="screen" id="screen-lesson">
-        <div class="card">
-            <div class="card-body">
-                <div class="lesson-header">
-                    <div class="lesson-title" id="lesson-title"></div>
-                    <div class="header-right">
-                        <button class="btn-icon print-hide" onclick="printCurrent()" title="Сохранить в PDF">📄</button>
-                        <button class="btn-icon print-hide" onclick="toggleTheme()" title="Сменить тему">🌙</button>
-                        <button class="btn btn-text print-hide" onclick="exitToMenu()">← В меню</button>
-                    </div>
-                </div>
-                <div class="progress-bar" style="margin-top:20px;"><div class="progress-fill" id="progress-fill"></div></div>
-            </div>
-        </div>
-
-        <div class="lesson-layout">
-            <div class="lesson-main">
-                <div class="card">
-                    <div class="card-body" id="slide-content"></div>
-                </div>
-            </div>
-            <aside class="lesson-sidebar">
-                <h3>Содержание</h3>
-                <nav class="topic-list" id="topic-list"></nav>
-            </aside>
-        </div>
-    </div>
-
-    <div class="screen" id="screen-quiz">
-        <div class="card">
-            <div class="card-body">
-                <div class="lesson-header">
-                    <div class="lesson-title" id="quiz-title"></div>
-                    <div class="header-right">
-                        <span class="timer print-hide" id="quiz-timer">00:00</span>
-                        <button class="btn-icon print-hide" onclick="printCurrent()" title="Сохранить в PDF">📄</button>
-                        <button class="btn-icon print-hide" onclick="toggleTheme()" title="Сменить тему">🌙</button>
-                        <button class="btn btn-text print-hide" onclick="exitToMenu()">← В меню</button>
-                    </div>
-                </div>
-                <div class="progress-bar" style="margin-top:20px;"><div class="progress-fill" id="quiz-progress-fill"></div></div>
-            </div>
-        </div>
-
-        <div class="quiz-layout">
-            <div class="quiz-main">
-                <div class="card">
-                    <div class="card-body" id="quiz-content"></div>
-                </div>
-            </div>
-            <aside class="quiz-sidebar">
-                <h3>Навигация</h3>
-                <div class="quiz-nav-grid" id="quiz-nav-grid"></div>
-            </aside>
-        </div>
-    </div>
-
-    <div class="screen" id="screen-memo">
-        <div class="memo-screen-header">
-            <h1 class="memo-screen-title" id="memo-title"></h1>
-            <div class="header-right">
-                <button class="btn-icon print-hide" onclick="printCurrent()" title="Сохранить в PDF">📄</button>
-                <button class="btn-icon print-hide" onclick="toggleTheme()" title="Сменить тему">🌙</button>
-                <button class="btn btn-text print-hide" onclick="exitToMenu()">← В меню</button>
-            </div>
-        </div>
-        <div class="memo-grid" id="memo-grid"></div>
-    </div>
-
+<div class="top">
+    <h1 class="top-title">📚 Конструктор курсов</h1>
+    <button class="btn-icon" onclick="toggleTheme()" title="Сменить тему" id="theme-btn">🌙</button>
 </div>
 
-<script src="data.js"></script>
-<script src="index.js"></script>
+<div class="grid" id="grid"></div>
+
+<!-- ============================================================
+     СПИСОК КУРСОВ — подключается ДО основного скрипта,
+     чтобы переменная COURSES была доступна при первом рендере.
+     ============================================================ -->
+<script src="courses.js"></script>
+
+<script>
+// ============================================================
+// Тема (переключение)
+// ============================================================
+function applyTheme(theme) {
+    document.documentElement.setAttribute("data-theme", theme);
+    const btn = document.getElementById("theme-btn");
+    if (btn) btn.textContent = theme === "dark" ? "☀️" : "🌙";
+}
+function toggleTheme() {
+    const current = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
+    const next = current === "dark" ? "light" : "dark";
+    try { localStorage.setItem("kp_aggregator_theme", next); } catch (e) {}
+    applyTheme(next);
+}
+(function initTheme() {
+    const current = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
+    applyTheme(current);
+})();
+
+// ============================================================
+// Рендер списка курсов
+// ============================================================
+function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    }[c]));
+}
+
+function safeFolderName(folder) {
+    return String(folder).replace(/[^a-zA-Z0-9._-]/g, "");
+}
+
+function renderCourses() {
+    const grid = document.getElementById("grid");
+    if (!grid) return;
+
+    if (typeof COURSES === "undefined" || !Array.isArray(COURSES)) {
+        grid.outerHTML = `
+            <div class="empty">
+                <h2 class="empty-title">⚠ Список курсов не загружен</h2>
+                <p>Файл <code>courses.js</code> не подключён или содержит ошибку.</p>
+                <p class="empty-hint">Проверь, что файл <code>courses.js</code> лежит рядом с <code>index.html</code> и содержит:<br><br>
+                const COURSES = [<br>
+                &nbsp;&nbsp;&nbsp;&nbsp;{ folder: "english", title: "Английский" }<br>
+                ];</p>
+            </div>`;
+        return;
+    }
+
+    if (COURSES.length === 0) {
+        grid.outerHTML = `
+            <div class="empty">
+                <h2 class="empty-title">Пока ни одного курса</h2>
+                <p>Чтобы добавить первый курс:</p>
+                <p class="empty-hint">
+                    1. Запусти <b>courses.bat</b> → выбери «1» → введи имя папки и название.<br>
+                    2. Открой <b>courses.js</b> и добавь строчку в массив COURSES.
+                </p>
+            </div>`;
+        return;
+    }
+
+    let html = "";
+    COURSES.forEach(course => {
+        const rawFolder = String(course.folder || "").trim();
+        const folder = safeFolderName(rawFolder);
+        if (!folder) return;
+
+        const title = String(course.title || rawFolder).trim();
+        const safeTitle = escapeHtml(title);
+
+        html += `<a class="course-card" href="${folder}/index.html">` +
+                `<div class="course-title">${safeTitle}</div>` +
+                `<div class="course-link">Перейти →</div>` +
+                `</a>`;
+    });
+
+    grid.innerHTML = html;
+}
+
+renderCourses();
+</script>
+
 </body>
 </html>

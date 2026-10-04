@@ -3,8 +3,15 @@
    Требует: data.js загружен ДО этого файла (allLessons, courseSettings)
    ============================================================ */
 
-const STORAGE_KEY = "kp_course_v1";
 const THEME_KEY = "kp_course_theme";
+
+// Уникальный ключ курса. Берётся из courseSettings.courseKey.
+// Если его нет — fallback на "default" (для старых курсов).
+const COURSE_KEY = (typeof courseSettings !== "undefined" && courseSettings && courseSettings.courseKey)
+    ? String(courseSettings.courseKey).trim()
+    : "default";
+
+const STORAGE_KEY = "kp_course_v1_" + COURSE_KEY;
 
 let currentLessonId = null;
 let currentSlide = 0;

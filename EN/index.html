@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title id="page-title">Курс</title>
+    <script>
+        // Anti-FOUC: применяем тему до первой отрисовки
+        (function() {
+            try {
+                var t = localStorage.getItem("kp_course_theme");
+                if (t === "dark" || t === "light") {
+                    document.documentElement.setAttribute("data-theme", t);
+                } else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+                    document.documentElement.setAttribute("data-theme", "dark");
+                }
+            } catch (e) {}
+        })();
+    </script>
+    <link rel="stylesheet" href="index.css">
+</head>
+<body>
+
+<div class="app-container" id="app-container">
+
+    <div class="screen active" id="screen-menu">
+        <div class="screen-header">
+            <div>
+                <h1 class="screen-title" id="course-title" ondblclick="openAdmin()">Курс</h1>
+                <p class="screen-subtitle">Выбери блок и изучай теорию, проходи тесты или открывай памятки</p>
+            </div>
+            <button class="btn-icon" onclick="toggleTheme()" title="Сменить тему">🌙</button>
+        </div>
+        <div class="menu-list" id="menu-list"></div>
+    </div>
+
+    <div class="screen" id="screen-lesson">
+        <div class="card">
+            <div class="card-body">
+                <div class="lesson-header">
+                    <div class="lesson-title" id="lesson-title"></div>
+                    <div class="header-right">
+                        <button class="btn-icon print-hide" onclick="printCurrent()" title="Сохранить в PDF">📄</button>
+                        <button class="btn-icon print-hide" onclick="toggleTheme()" title="Сменить тему">🌙</button>
+                        <button class="btn btn-text print-hide" onclick="exitToMenu()">← В меню</button>
+                    </div>
+                </div>
+                <div class="progress-bar" style="margin-top:20px;"><div class="progress-fill" id="progress-fill"></div></div>
+            </div>
+        </div>
+
+        <div class="lesson-layout">
+            <div class="lesson-main">
+                <div class="card">
+                    <div class="card-body" id="slide-content"></div>
+                </div>
+            </div>
+            <aside class="lesson-sidebar">
+                <h3>Содержание</h3>
+                <nav class="topic-list" id="topic-list"></nav>
+            </aside>
+        </div>
+    </div>
+
+    <div class="screen" id="screen-quiz">
+        <div class="card">
+            <div class="card-body">
+                <div class="lesson-header">
+                    <div class="lesson-title" id="quiz-title"></div>
+                    <div class="header-right">
+                        <span class="timer print-hide" id="quiz-timer">00:00</span>
+                        <button class="btn-icon print-hide" onclick="printCurrent()" title="Сохранить в PDF">📄</button>
+                        <button class="btn-icon print-hide" onclick="toggleTheme()" title="Сменить тему">🌙</button>
+                        <button class="btn btn-text print-hide" onclick="exitToMenu()">← В меню</button>
+                    </div>
+                </div>
+                <div class="progress-bar" style="margin-top:20px;"><div class="progress-fill" id="quiz-progress-fill"></div></div>
+            </div>
+        </div>
+
+        <div class="quiz-layout">
+            <div class="quiz-main">
+                <div class="card">
+                    <div class="card-body" id="quiz-content"></div>
+                </div>
+            </div>
+            <aside class="quiz-sidebar">
+                <h3>Навигация</h3>
+                <div class="quiz-nav-grid" id="quiz-nav-grid"></div>
+            </aside>
+        </div>
+    </div>
+
+    <div class="screen" id="screen-memo">
+        <div class="memo-screen-header">
+            <h1 class="memo-screen-title" id="memo-title"></h1>
+            <div class="header-right">
+                <button class="btn-icon print-hide" onclick="printCurrent()" title="Сохранить в PDF">📄</button>
+                <button class="btn-icon print-hide" onclick="toggleTheme()" title="Сменить тему">🌙</button>
+                <button class="btn btn-text print-hide" onclick="exitToMenu()">← В меню</button>
+            </div>
+        </div>
+        <div class="memo-grid" id="memo-grid"></div>
+    </div>
+
+</div>
+
+<script src="data.js"></script>
+<script src="index.js"></script>
+</body>
+</html>

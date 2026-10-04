@@ -1,12 +1,20 @@
 /* ============================================================
    ADMIN.JS — логика редактора курса
-   Требуется: data.js загружен ДО этого файла (allLessons, courseSettings)
+   Требует: data.js загружен ДО этого файла (allLessons, courseSettings)
    ============================================================ */
 
 let state = { currentLessonId: null, currentSlideIndex: 0 };
-const DRAFT_KEY = "kp_course_draft_v1";
 const THEME_KEY = "kp_course_theme";
-const PROGRESS_KEY = "kp_course_v1";
+
+// Уникальный ключ курса. Берётся из courseSettings.courseKey.
+// Если его нет — fallback на "default" (для старых курсов).
+const COURSE_KEY = (typeof courseSettings !== "undefined" && courseSettings && courseSettings.courseKey)
+    ? String(courseSettings.courseKey).trim()
+    : "default";
+
+const DRAFT_KEY = "kp_course_draft_v1_" + COURSE_KEY;
+const PROGRESS_KEY = "kp_course_v1_" + COURSE_KEY;
+
 const MAX_MEMO_CELLS = 8;
 const MAX_TABLE_ROWS = 10;
 const MAX_TABLE_COLS = 10;
@@ -456,6 +464,7 @@ function createBlockElement(block, index, context) {
             const li = document.createElement("li");
             const sp = document.createElement("span");
             sp.className = "li-text"; sp.contentEditable = "true"; sp.innerHTML = item;
+            sp.addEventListener("paste", handlePaste);
             li.appendChild(sp);
             const tools = document.createElement("div");
             tools.className = "li-tools";
@@ -471,6 +480,7 @@ function createBlockElement(block, index, context) {
             <div class="url-row"><span>URL:</span><input type="text" class="link-url" value="${(block.href || "").replace(/"/g, '&quot;')}" placeholder="https://... или #lessonId:3"></div>
             <div class="url-hint">Внешние: https://... | файлы: files/doc.pdf | внутри: #smarts или #smarts:3</div>`;
         editable.querySelector(".link-url").addEventListener("input", onFieldChange);
+        editable.querySelector(".link-text").addEventListener("paste", handlePaste);
     } else if (block.type === "image") {
         editable = createMediaBlock(block, "image");
     } else if (block.type === "video") {
@@ -485,6 +495,7 @@ function createBlockElement(block, index, context) {
             editable.addEventListener("keydown", e => {
                 if (e.key === "Enter" && !e.shiftKey) e.preventDefault();
             });
+            editable.addEventListener("paste", handlePaste);
         }
     }
 
@@ -569,6 +580,55 @@ function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, c => ({
         "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
     }[c]));
+}
+
+function sanitizeHtml(html) {
+    if (html == null) return "";
+    let s = String(html);
+
+    s = s.replace(/<(script|style|iframe|object|embed|svg|math)[^>]*>[\s\S]*?<\/\1>/gi, "");
+    s = s.replace(/<(script|style|iframe|object|embed|svg|math)[^>]*\/?>/gi, "");
+    s = s.replace(/<br\s*\/?>/gi, " ");
+    s = s.replace(/&nbsp;/gi, " ");
+
+    const allowed = /^(strong|b|em|i|u)$/i;
+    s = s.replace(/<\/?([a-zA-Z][a-zA-Z0-9]*)\b[^>]*>/g, function(match, tagName) {
+        if (allowed.test(tagName)) {
+            const isClosing = match.charAt(1) === "/";
+            return isClosing ? "</" + tagName.toLowerCase() + ">" : "<" + tagName.toLowerCase() + ">";
+        }
+        return "";
+    });
+
+    s = s.replace(/[ \t]+/g, " ");
+    s = s.trim();
+    return s;
+}
+
+function handlePaste(e) {
+    e.preventDefault();
+    const cd = e.clipboardData || window.clipboardData;
+    if (!cd) return;
+
+    let html = cd.getData("text/html") || "";
+    let text = cd.getData("text/plain") || "";
+
+    let clean;
+    if (html) {
+        clean = sanitizeHtml(html);
+    } else {
+        clean = text
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/\r?\n+/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+    }
+
+    if (!clean) return;
+
+    document.execCommand("insertHTML", false, clean);
 }
 
 function addBlock(type) {
@@ -1273,10 +1333,10 @@ function readBlocksFromContainer(containerId) {
     const nc = [];
     wrappers.forEach(w => {
         const type = w.dataset.type;
-        if (type === "p" || type === "h3") nc.push({ type, text: w.querySelector("p, h3").innerHTML });
-        else if (type === "quote") nc.push({ type: "quote", text: w.querySelector(".quote-text").innerHTML });
-        else if (type === "ul") nc.push({ type: "ul", items: Array.from(w.querySelectorAll("li .li-text")).map(s => s.innerHTML) });
-        else if (type === "link") nc.push({ type: "link", text: w.querySelector(".link-text").innerHTML, href: w.querySelector(".link-url").value });
+        if (type === "p" || type === "h3") nc.push({ type, text: sanitizeHtml(w.querySelector("p, h3").innerHTML) });
+        else if (type === "quote") nc.push({ type: "quote", text: sanitizeHtml(w.querySelector(".quote-text").innerHTML) });
+        else if (type === "ul") nc.push({ type: "ul", items: Array.from(w.querySelectorAll("li .li-text")).map(s => sanitizeHtml(s.innerHTML)) });
+        else if (type === "link") nc.push({ type: "link", text: sanitizeHtml(w.querySelector(".link-text").innerHTML), href: w.querySelector(".link-url").value });
         else if (type === "image") {
             const inp = w.querySelector(".media-src-input");
             nc.push({ type: "image", src: inp ? inp.value.trim() : "", alt: "" });
@@ -1982,7 +2042,7 @@ function buildDataJs() {
     readFromDom();
     const sJ = JSON.stringify(courseSettings, null, 4);
     const lJ = JSON.stringify(allLessons, null, 4);
-    return "// ============================================================\n// ДАННЫЕ КУРСА\n// Редактируется через admin.html.\n// Типы блоков: lesson.type = \"theory\" | \"quiz\" | \"memo\".\n// Тип вопроса: q.type = \"single\" | \"multi\" | \"match\" | \"card\".\n// single/multi: { text, options, correct: [массив], explain, group }\n// match:        { text, pairs: [{left, right}], explain?, group }\n// card:         { front, frontImage, back, backImage, group }\n// memo:         { title, cells: [{ title, content: [...] }] }\n// table:        { type: \"table\", header: bool, rows: [[...], [...]] }\n// randomizeQuestions / randomizeOptions — перемешивание.\n// Контент слайдов/ячеек: блоки p, h3, ul, quote, link, image, video, table.\n// ============================================================\n\n" +
+    return "// ============================================================\n// ДАННЫЕ КУРСА\n// Редактируется через admin.html.\n// courseKey — уникальный ключ курса, не менять!\n// Типы блоков: lesson.type = \"theory\" | \"quiz\" | \"memo\".\n// Тип вопроса: q.type = \"single\" | \"multi\" | \"match\" | \"card\".\n// single/multi: { text, options, correct: [массив], explain, group }\n// match:        { text, pairs: [{left, right}], explain?, group }\n// card:         { front, frontImage, back, backImage, group }\n// memo:         { title, cells: [{ title, content: [...] }] }\n// table:        { type: \"table\", header: bool, rows: [[...], [...]] }\n// randomizeQuestions / randomizeOptions — перемешивание.\n// Контент слайдов/ячеек: блоки p, h3, ul, quote, link, image, video, table.\n// ============================================================\n\n" +
            "const courseSettings = " + sJ + ";\n\n" +
            "const allLessons = " + lJ + ";\n";
 }
