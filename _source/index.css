@@ -99,12 +99,10 @@
     --radius-md: 10px;
     --radius-lg: 14px;
 }
-/* ============================================================
-   ЧАСТЬ 1 — ТЁМНАЯ ТЕМА
-   Замени этим блоком старый [data-theme="dark"] { ... }
-   в файлах admin.css и index.css
-   ============================================================ */
 
+/* ============================================================
+   ЧАСТЬ 1 — ТЁМНАЯ ТЕМА (почти чёрная)
+   ============================================================ */
 [data-theme="dark"] {
     --bg: #0A0A0A;
     --bg-soft: #141414;
@@ -322,6 +320,7 @@ h1, h2, h3 { font-weight: 700; letter-spacing: 0.02em; }
 .menu-item.theory { border-left-color: var(--secondary); }
 .menu-item.quiz { border-left-color: var(--primary); }
 .menu-item.memo { border-left-color: var(--memo-accent); }
+.menu-item.glossary { border-left-color: var(--memo-accent); }
 
 .menu-info { flex: 1; min-width: 200px; }
 .menu-info h3 {
@@ -358,6 +357,10 @@ h1, h2, h3 { font-weight: 700; letter-spacing: 0.02em; }
     color: var(--primary);
 }
 .menu-type-badge.memo {
+    background: var(--memo-accent-soft);
+    color: var(--memo-accent);
+}
+.menu-type-badge.glossary {
     background: var(--memo-accent-soft);
     color: var(--memo-accent);
 }
@@ -476,13 +479,6 @@ h1, h2, h3 { font-weight: 700; letter-spacing: 0.02em; }
     margin: 28px 0 12px;
     color: var(--text-strong);
 }
-.slide-content ul { margin: 0 0 16px; padding-left: 24px; }
-.slide-content ul li {
-    font-size: 16px;
-    line-height: 1.7;
-    margin-bottom: 8px;
-    color: var(--text);
-}
 .slide-content .quote {
     margin: 24px 0;
     padding: 16px 22px;
@@ -494,6 +490,55 @@ h1, h2, h3 { font-weight: 700; letter-spacing: 0.02em; }
     color: var(--text);
 }
 .slide-content strong { color: var(--text-strong); font-weight: 700; }
+
+/* ===== СПИСКИ В КОНТЕНТЕ ===== */
+.slide-list {
+    list-style: none;
+    margin: 0 0 16px;
+    padding-left: 0;
+}
+.slide-list-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    font-size: 16px;
+    line-height: 1.7;
+    color: var(--text);
+    margin-bottom: 6px;
+    padding-left: 0;
+}
+.slide-list-item.level-0 { margin-left: 0; }
+.slide-list-item.level-1 { margin-left: 28px; }
+.slide-list-item.level-2 { margin-left: 56px; }
+.slide-list-marker {
+    flex-shrink: 0;
+    min-width: 20px;
+    font-weight: 700;
+    color: var(--primary);
+    text-align: right;
+}
+.slide-list-check {
+    flex-shrink: 0;
+    min-width: 20px;
+    color: var(--primary);
+    font-size: 18px;
+    line-height: 1.5;
+    text-align: right;
+}
+.slide-list-text {
+    flex: 1;
+    min-width: 0;
+}
+
+.slide-list-number .slide-list-marker { font-weight: 700; }
+.slide-list-checkbox .slide-list-text {
+    padding-left: 4px;
+}
+
+@media (max-width: 600px) {
+    .slide-list-item.level-1 { margin-left: 18px; }
+    .slide-list-item.level-2 { margin-left: 36px; }
+}
 
 /* ===== Медиа ===== */
 .slide-media { margin: 24px 0; }
@@ -1494,10 +1539,10 @@ h1, h2, h3 { font-weight: 700; letter-spacing: 0.02em; }
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
     }
-}/* ============================================================
+}
+
+/* ============================================================
    ЧАСТЬ 2 — ПРОЗРАЧНЫЕ КНОПКИ
-   Добавь этот блок В КОНЕЦ файла admin.css и index.css
-   (один раз, после остальных стилей).
    ============================================================ */
 
 /* --- Основная кнопка (.btn-primary) --- */
@@ -1578,4 +1623,125 @@ h1, h2, h3 { font-weight: 700; letter-spacing: 0.02em; }
     background: transparent;
     border: 2px solid var(--error);
     color: var(--error);
+}
+
+/* ===== ГЛОССАРИЙ ===== */
+.glossary-layout {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+}
+.glossary-sidebar {
+    width: 300px;
+    flex-shrink: 0;
+    position: sticky;
+    top: 20px;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    padding: 16px;
+    max-height: calc(100vh - 40px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.glossary-main {
+    flex: 1;
+    min-width: 0;
+}
+.glossary-search-wrap {
+    margin-bottom: 14px;
+}
+.glossary-search {
+    width: 100%;
+    padding: 10px 14px;
+    font-size: 14px;
+    font-family: inherit;
+    color: var(--text);
+    background: var(--input-bg);
+    border: 1px solid var(--border);
+    border-radius: 100px;
+    outline: none;
+    transition: all .15s;
+}
+.glossary-search:hover { border-color: var(--text-muted); }
+.glossary-search:focus {
+    background: var(--input-bg-focus);
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--primary-soft);
+}
+.glossary-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    overflow-y: auto;
+    flex: 1;
+    margin: 0 -4px;
+    padding: 0 4px;
+}
+.glossary-letter {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: .8px;
+    padding: 12px 10px 4px;
+    margin: 0;
+}
+.glossary-letter:first-child { padding-top: 0; }
+.glossary-term {
+    text-align: left;
+    padding: 10px 14px;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 14px;
+    font-family: inherit;
+    font-weight: 500;
+    transition: all .15s;
+    line-height: 1.4;
+    width: 100%;
+}
+.glossary-term:hover { background: var(--hover); }
+.glossary-term.current {
+    background: var(--primary-soft);
+    color: var(--primary);
+    font-weight: 700;
+}
+.glossary-term mark {
+    background: #FFE58A;
+    color: #000;
+    padding: 0 2px;
+    border-radius: 3px;
+}
+[data-theme="dark"] .glossary-term mark {
+    background: #B88A00;
+    color: #FFF;
+}
+.glossary-empty {
+    font-size: 13px;
+    color: var(--text-muted);
+    font-style: italic;
+    padding: 12px 10px;
+}
+
+.glossary-term-title {
+    font-size: 24px;
+    font-weight: 700;
+    margin: 0 0 20px;
+    color: var(--text-strong);
+    line-height: 1.3;
+    letter-spacing: -.2px;
+}
+
+@media (max-width: 800px) {
+    .glossary-layout { flex-direction: column; }
+    .glossary-sidebar {
+        width: 100%;
+        position: static;
+        max-height: 320px;
+    }
 }

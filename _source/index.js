@@ -5,9 +5,60 @@
 
 const THEME_KEY = "kp_course_theme";
 
-// Уникальный ключ курса. Берётся из courseSettings.courseKey.
-// Если его нет — fallback на "default" (для старых курсов).
-const COURSE_KEY = (typeof courseSettings !== "undefined" && courseSettings && courseSettings.courseKey)
+// ============================================================
+// ЗАЩИТА ОТ ПОВРЕЖДЁННОГО data.js
+// ============================================================
+(function checkData() {
+    let problem = null;
+
+    if (typeof courseSettings === "undefined") {
+        problem = "Файл <code>data.js</code> не загрузился или содержит синтаксическую ошибку (переменная <code>courseSettings</code> не найдена).";
+    } else if (typeof allLessons === "undefined") {
+        problem = "В <code>data.js</code> отсутствует переменная <code>allLessons</code>.";
+    } else if (allLessons === null || typeof allLessons !== "object" || Array.isArray(allLessons)) {
+        problem = "Переменная <code>allLessons</code> в <code>data.js</code> должна быть объектом (словарь блоков).";
+    } else if (Object.keys(allLessons).length === 0) {
+        problem = "В курсе нет ни одного блока. Добавь хотя бы один блок через <code>admin.html</code>.";
+    }
+
+    if (problem) {
+        showFatalError(problem);
+        throw new Error("data.js check failed");
+    }
+})();
+
+function showFatalError(reason) {
+    document.body.innerHTML = `
+        <div style="
+            font-family: 'M PLUS Rounded 1c', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            max-width: 640px;
+            margin: 80px auto;
+            padding: 32px 24px;
+            background: #FAF6EC;
+            border: 1px solid #E0D6C0;
+            border-radius: 14px;
+            box-shadow: 0 1px 2px rgba(43,43,43,.08);
+            color: #1A1A1A;
+            line-height: 1.6;
+        ">
+            <h1 style="margin: 0 0 12px; font-size: 22px; font-weight: 700; color: #000;">⚠ Курс не загрузился</h1>
+            <p style="margin: 0 0 16px; font-size: 15px; color: #4A4540;">${reason}</p>
+            <div style="padding: 14px 18px; background: #F0D8DC; border-left: 4px solid #8B1A2B; border-radius: 8px; font-size: 14px; line-height: 1.7;">
+                <strong>Если вы автор курса:</strong><br>
+                1. Откройте <code style="background: rgba(0,0,0,.06); padding: 2px 6px; border-radius: 4px; font-family: ui-monospace, Menlo, Consolas, monospace;">admin.html</code> этого курса.<br>
+                2. Нажмите кнопку <strong>↻ Откатить</strong> в шапке.<br>
+                3. Проверьте, что файл <code style="background: rgba(0,0,0,.06); padding: 2px 6px; border-radius: 4px; font-family: ui-monospace, Menlo, Consolas, monospace;">data.js</code> не повреждён (нет опечаток, все скобки закрыты).
+            </div>
+            <div style="margin-top: 16px; padding: 14px 18px; background: #EBE4D4; border-radius: 8px; font-size: 14px; line-height: 1.7;">
+                <strong>Если вы читатель:</strong><br>
+                1. Обновите страницу (<code style="background: rgba(0,0,0,.06); padding: 2px 6px; border-radius: 4px; font-family: ui-monospace, Menlo, Consolas, monospace;">Ctrl+F5</code> или <code style="background: rgba(0,0,0,.06); padding: 2px 6px; border-radius: 4px; font-family: ui-monospace, Menlo, Consolas, monospace;">Cmd+Shift+R</code>).<br>
+                2. Если не помогает — сообщите автору курса о проблеме.
+            </div>
+        </div>
+    `;
+}
+
+const COURSE_KEY = (courseSettings && courseSettings.courseKey)
     ? String(courseSettings.courseKey).trim()
     : "default";
 
@@ -18,6 +69,15 @@ let currentSlide = 0;
 let slides = [];
 let lessonState = {};
 let quizTimerInterval = null;
+
+let glossaryState = {
+    selectedTermIndex: 0,
+    searchQuery: ""
+};
+
+// История навигации: куда вернуться при нажатии «← Назад».
+// null — некуда возвращаться (пришли из меню). Объект — откуда пришли.
+let navHistory = null;
 
 const appContainer = document.getElementById("app-container");
 const menuList = document.getElementById("menu-list");
@@ -32,6 +92,10 @@ const quizNavGrid = document.getElementById("quiz-nav-grid");
 const quizTimerEl = document.getElementById("quiz-timer");
 const memoTitleEl = document.getElementById("memo-title");
 const memoGridEl = document.getElementById("memo-grid");
+const glossaryTitleEl = document.getElementById("glossary-title");
+const glossaryListEl = document.getElementById("glossary-list");
+const glossaryContentEl = document.getElementById("glossary-content");
+const glossarySearchEl = document.getElementById("glossary-search");
 
 function openAdmin() {
     window.open("admin.html", "_blank");
@@ -63,6 +127,29 @@ function detectType(q) {
     const c = normalizeCorrect(q.correct);
     return c.length > 1 ? "multi" : "single";
 }
+
+// ============================================================
+// Миграция старых списков (items: [строка, ...]) → {text, level}
+// ============================================================
+function migrateListBlock(b) {
+    if (!b || b.type !== "ul") return;
+    if (!b.style) b.style = "bullet";
+    if (!Array.isArray(b.items)) b.items = [];
+    b.items = b.items.map(item => {
+        if (typeof item === "string") return { text: item, level: 0 };
+        if (item && typeof item === "object") {
+            if (item.level === undefined) item.level = 0;
+            if (item.text === undefined) item.text = "";
+            return item;
+        }
+        return { text: String(item || ""), level: 0 };
+    });
+}
+function migrateListBlocksInContent(content) {
+    if (!Array.isArray(content)) return;
+    content.forEach(b => migrateListBlock(b));
+}
+
 Object.values(allLessons).forEach(lesson => {
     if (lesson.type === "quiz") {
         if (!lesson.groups) lesson.groups = [];
@@ -82,6 +169,19 @@ Object.values(allLessons).forEach(lesson => {
         lesson.cells.forEach(cell => {
             if (!cell.content) cell.content = [];
             if (cell.title === undefined) cell.title = "";
+            migrateListBlocksInContent(cell.content);
+        });
+    } else if (lesson.type === "glossary") {
+        if (!lesson.terms) lesson.terms = [];
+        lesson.terms.forEach(term => {
+            if (!term.content) term.content = [];
+            if (term.name === undefined) term.name = "";
+            migrateListBlocksInContent(term.content);
+        });
+    } else if (lesson.type === "theory" && lesson.slides) {
+        lesson.slides.forEach(slide => {
+            if (!slide.content) slide.content = [];
+            migrateListBlocksInContent(slide.content);
         });
     }
 });
@@ -123,7 +223,17 @@ function showScreen(name) {
     document.getElementById("screen-" + name).classList.add("active");
     if (name === "memo") appContainer.classList.add("wide");
     else appContainer.classList.remove("wide");
+    updateBackButton();
 }
+
+function updateBackButton() {
+    const show = navHistory !== null;
+    ["back-btn-lesson", "back-btn-quiz", "back-btn-memo", "back-btn-glossary"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = show ? "inline-flex" : "none";
+    });
+}
+
 function loadAll() { try { const raw = localStorage.getItem(STORAGE_KEY); lessonState = raw ? JSON.parse(raw) : {}; } catch(e) { lessonState = {}; } }
 function saveAll() { localStorage.setItem(STORAGE_KEY, JSON.stringify(lessonState)); }
 function getState(id) {
@@ -147,16 +257,19 @@ function renderMenu() {
         const lesson = allLessons[id];
         const isQuiz = lesson.type === "quiz";
         const isMemo = lesson.type === "memo";
+        const isGlossary = lesson.type === "glossary";
         const state = lessonState[id] || {};
         const started = isQuiz
             ? (state.questionState || []).some(q => q && q.done)
-            : (isMemo ? false : (state.visited || []).length > 0);
+            : (isMemo || isGlossary ? false : (state.visited || []).length > 0);
 
-        let cls = "menu-item " + (isQuiz ? "quiz" : (isMemo ? "memo" : "theory"));
+        let cls = "menu-item " + (isQuiz ? "quiz" : (isMemo ? "memo" : (isGlossary ? "glossary" : "theory")));
         const badge = isQuiz
             ? `<span class="menu-type-badge quiz">Тест</span>`
-            : (isMemo ? `<span class="menu-type-badge memo">Памятка</span>` : `<span class="menu-type-badge theory">Теория</span>`);
-        const icon = isQuiz ? "🧪 " : (isMemo ? "📌 " : "📖 ");
+            : (isMemo ? `<span class="menu-type-badge memo">Памятка</span>`
+                : (isGlossary ? `<span class="menu-type-badge glossary">Глоссарий</span>`
+                    : `<span class="menu-type-badge theory">Теория</span>`));
+        const icon = isQuiz ? "🧪 " : (isMemo ? "📌 " : (isGlossary ? "📖 " : "📖 "));
 
         html += `<div class="${cls}"><div class="menu-info">`;
         html += `<h3>${icon}${lesson.title} ${badge}</h3>`;
@@ -165,11 +278,17 @@ function renderMenu() {
             const cellCount = (lesson.cells || []).length;
             html += `<p>${cellCount} ${pluralizeCells(cellCount)}</p>`;
         }
+        else if (isGlossary) {
+            const termsCount = (lesson.terms || []).length;
+            html += `<p>${termsCount} ${pluralizeTerms(termsCount)}</p>`;
+        }
         else html += `<p>${lesson.slides.length} слайдов</p>`;
         html += `</div><div class="menu-actions">`;
 
         if (isMemo) {
             html += `<button class="btn btn-primary" onclick="openMemo('${id}')">Открыть</button>`;
+        } else if (isGlossary) {
+            html += `<button class="btn btn-primary" onclick="openGlossary('${id}')">Открыть</button>`;
         } else if (isQuiz) {
             if (started) {
                 html += `<button class="btn btn-primary" onclick="startQuiz('${id}')">Продолжить</button>`;
@@ -198,6 +317,14 @@ function pluralizeCells(n) {
     return "ячеек";
 }
 
+function pluralizeTerms(n) {
+    const mod10 = n % 10;
+    const mod100 = n % 100;
+    if (mod10 === 1 && mod100 !== 11) return "термин";
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return "термина";
+    return "терминов";
+}
+
 function resetBlock(id) { delete lessonState[id]; saveAll(); renderMenu(); }
 
 function startLesson(id) {
@@ -219,6 +346,7 @@ function exitToMenu() {
         if (lesson && lesson.type === "quiz") saveAll();
         else if (lesson && lesson.type === "theory") { const s = getState(currentLessonId); s.currentSlide = currentSlide; saveAll(); }
     }
+    navHistory = null;
     showScreen("menu"); renderMenu();
 }
 function markVisited(i) { const s = getState(currentLessonId); if (!s.visited.includes(i)) s.visited.push(i); s.currentSlide = i; saveAll(); }
@@ -264,12 +392,44 @@ function renderTable(b) {
     return html;
 }
 
+// ============================================================
+// РЕНДЕР СПИСКА (UL) — с уровнями и стилями
+// ============================================================
+function renderList(b) {
+    const style = b.style || "bullet";
+    const items = b.items || [];
+    if (!items.length) return "";
+    let html = `<ul class="slide-list slide-list-${style}">`;
+    let numCounter = [0, 0, 0];
+    items.forEach(item => {
+        const text = (typeof item === "string") ? item : (item.text || "");
+        const level = (typeof item === "object" && item.level !== undefined) ? item.level : 0;
+        const safeLevel = Math.max(0, Math.min(2, level));
+        if (style === "number") {
+            numCounter[safeLevel] = (numCounter[safeLevel] || 0) + 1;
+            for (let k = safeLevel + 1; k < numCounter.length; k++) numCounter[k] = 0;
+        }
+        let markerHtml = "";
+        if (style === "bullet") {
+            const m = safeLevel === 0 ? "•" : (safeLevel === 1 ? "◦" : "▪");
+            markerHtml = `<span class="slide-list-marker">${m}</span>`;
+        } else if (style === "number") {
+            markerHtml = `<span class="slide-list-marker">${numCounter[safeLevel]}.</span>`;
+        } else if (style === "checkbox") {
+            markerHtml = `<span class="slide-list-check">☐</span>`;
+        }
+        html += `<li class="slide-list-item level-${safeLevel}">${markerHtml}<span class="slide-list-text">${text}</span></li>`;
+    });
+    html += `</ul>`;
+    return html;
+}
+
 function renderContentBlocks(blocks) {
     let html = "";
     (blocks || []).forEach(b => {
         if (b.type === "p") html += `<p>${b.text}</p>`;
         else if (b.type === "h3") html += `<h3>${b.text}</h3>`;
-        else if (b.type === "ul") { html += `<ul>`; b.items.forEach(i => html += `<li>${i}</li>`); html += `</ul>`; }
+        else if (b.type === "ul") html += renderList(b);
         else if (b.type === "quote") html += `<div class="quote">${b.text}</div>`;
         else if (b.type === "link") html += renderLinkBlock(b);
         else if (b.type === "image" && b.src) html += `<div class="slide-media"><img src="${b.src}" alt="${b.alt || ''}" loading="lazy"></div>`;
@@ -330,18 +490,73 @@ function goToInternalLink(href) {
     const lessonId = parts[0]; const slideNum = parts[1] ? parseInt(parts[1]) - 1 : 0;
     const lesson = allLessons[lessonId];
     if (!lesson) { alert("Блок не найден: " + lessonId); return; }
+
+    saveNavHistory();
+
+    if (lesson.type === "quiz") { startQuiz(lessonId); return; }
+    if (lesson.type === "memo") { openMemo(lessonId); return; }
+    if (lesson.type === "glossary") { openGlossary(lessonId); return; }
+
     if (currentLessonId) {
         const cur = allLessons[currentLessonId];
         if (cur && cur.type === "theory") { const s = getState(currentLessonId); s.currentSlide = currentSlide; saveAll(); }
     }
-    if (lesson.type === "quiz") { startQuiz(lessonId); return; }
-    if (lesson.type === "memo") { openMemo(lessonId); return; }
     currentLessonId = lessonId; slides = lesson.slides;
     lessonTitleEl.textContent = lesson.title; showScreen("lesson");
     currentSlide = (slideNum >= 0 && slideNum < slides.length) ? slideNum : 0;
     markVisited(currentSlide); renderSlide();
     window.scrollTo({ top: 0, behavior: "smooth" });
 }
+
+function saveNavHistory() {
+    if (!currentLessonId) { navHistory = null; return; }
+    const lesson = allLessons[currentLessonId];
+    if (!lesson) { navHistory = null; return; }
+    if (lesson.type === "theory") {
+        navHistory = { lessonId: currentLessonId, slideIndex: currentSlide, lessonType: "theory" };
+    } else if (lesson.type === "quiz") {
+        const qs = getQuizState(currentLessonId);
+        navHistory = { lessonId: currentLessonId, slideIndex: qs.currentQuestion || 0, lessonType: "quiz" };
+    } else {
+        navHistory = { lessonId: currentLessonId, slideIndex: 0, lessonType: lesson.type };
+    }
+}
+
+function goBack() {
+    if (!navHistory) return;
+    const h = navHistory;
+    navHistory = null;
+    const lesson = allLessons[h.lessonId];
+    if (!lesson) { updateBackButton(); return; }
+
+    if (lesson.type === "quiz") {
+        startQuiz(h.lessonId);
+        const qs = getQuizState(h.lessonId);
+        qs.currentQuestion = h.slideIndex || 0;
+        saveAll();
+        renderQuiz();
+        updateBackButton();
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+    }
+    if (lesson.type === "memo") {
+        openMemo(h.lessonId);
+        updateBackButton();
+        return;
+    }
+    if (lesson.type === "glossary") {
+        openGlossary(h.lessonId);
+        updateBackButton();
+        return;
+    }
+    currentLessonId = h.lessonId; slides = lesson.slides;
+    currentSlide = (h.slideIndex >= 0 && h.slideIndex < slides.length) ? h.slideIndex : 0;
+    lessonTitleEl.textContent = lesson.title;
+    showScreen("lesson"); markVisited(currentSlide); renderSlide();
+    updateBackButton();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
 function goNext() { if (currentSlide < slides.length - 1) { currentSlide++; markVisited(currentSlide); renderSlide(); window.scrollTo({top:0,behavior:"smooth"}); } }
 function goPrev() { if (currentSlide > 0) { currentSlide--; markVisited(currentSlide); renderSlide(); window.scrollTo({top:0,behavior:"smooth"}); } }
 function finishLesson() {
@@ -404,6 +619,136 @@ function renderMemo(lesson) {
             </div>`;
         });
     });
+}
+
+/* ===== ГЛОССАРИЙ ===== */
+function openGlossary(id) {
+    stopQuizTimer();
+    const lesson = allLessons[id];
+    if (!lesson || lesson.type !== "glossary") return;
+    currentLessonId = id;
+    glossaryTitleEl.textContent = lesson.title;
+    glossaryState.selectedTermIndex = 0;
+    glossaryState.searchQuery = "";
+    if (glossarySearchEl) glossarySearchEl.value = "";
+    renderGlossary(lesson);
+    showScreen("glossary");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function getSortedTermsWithIndexes(lesson) {
+    const arr = (lesson.terms || []).map((term, origIndex) => ({ term, origIndex }));
+    arr.sort((a, b) => {
+        const na = String(a.term.name || "").trim().toLowerCase();
+        const nb = String(b.term.name || "").trim().toLowerCase();
+        if (na < nb) return -1;
+        if (na > nb) return 1;
+        return a.origIndex - b.origIndex;
+    });
+    return arr;
+}
+
+function getFirstLetter(name) {
+    const s = String(name || "").trim();
+    if (!s) return "—";
+    const ch = s.charAt(0).toUpperCase();
+    return ch;
+}
+
+function escapeRegExp(s) {
+    return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function highlightMatch(text, query) {
+    const safe = escapeHtml(text);
+    if (!query) return safe;
+    const q = query.trim();
+    if (!q) return safe;
+    try {
+        const re = new RegExp("(" + escapeRegExp(q) + ")", "gi");
+        return safe.replace(re, "<mark>$1</mark>");
+    } catch (e) {
+        return safe;
+    }
+}
+
+function renderGlossary(lesson) {
+    renderGlossaryList(lesson);
+    renderGlossaryTerm(lesson);
+}
+
+function renderGlossaryList(lesson) {
+    const sorted = getSortedTermsWithIndexes(lesson);
+    const query = String(glossaryState.searchQuery || "").trim().toLowerCase();
+
+    let html = "";
+    let shown = 0;
+    let lastLetter = null;
+
+    sorted.forEach(item => {
+        const name = String(item.term.name || "").trim();
+        if (query && !name.toLowerCase().includes(query)) return;
+        shown++;
+
+        const letter = getFirstLetter(name);
+        if (letter !== lastLetter) {
+            html += `<div class="glossary-letter">${escapeHtml(letter)}</div>`;
+            lastLetter = letter;
+        }
+
+        const isCurrent = item.origIndex === glossaryState.selectedTermIndex;
+        const displayName = name || "(без названия)";
+        html += `<button class="glossary-term${isCurrent ? ' current' : ''}" onclick="glossarySelect(${item.origIndex})">${highlightMatch(displayName, query)}</button>`;
+    });
+
+    if (shown === 0) {
+        html = `<div class="glossary-empty">Ничего не найдено</div>`;
+    }
+
+    glossaryListEl.innerHTML = html;
+}
+
+function renderGlossaryTerm(lesson) {
+    const term = (lesson.terms || [])[glossaryState.selectedTermIndex];
+    if (!term) {
+        glossaryContentEl.innerHTML = `<p style="color:var(--text-muted);">Термин не выбран.</p>`;
+        return;
+    }
+
+    const query = String(glossaryState.searchQuery || "").trim().toLowerCase();
+    const name = String(term.name || "").trim() || "(без названия)";
+
+    let html = `<h2 class="glossary-term-title">${highlightMatch(name, query)}</h2>`;
+    html += `<div class="slide-content">`;
+    html += renderContentBlocks(term.content);
+    html += `</div>`;
+    glossaryContentEl.innerHTML = html;
+
+    glossaryContentEl.querySelectorAll('.slide-media img, .slide-media video').forEach(el => {
+        el.addEventListener('error', () => {
+            const wrap = el.closest('.slide-media');
+            if (!wrap) return;
+            const src = el.getAttribute('src') || '';
+            const isVideo = el.tagName === 'VIDEO';
+            wrap.innerHTML = `<div class="slide-media-error">
+                ⚠ ${isVideo ? 'Видео' : 'Картинка'} не найдено:<br>
+                <code>${escapeHtml(src)}</code>
+            </div>`;
+        });
+    });
+}
+
+function onGlossarySearch() {
+    glossaryState.searchQuery = glossarySearchEl ? glossarySearchEl.value : "";
+    const lesson = allLessons[currentLessonId];
+    if (lesson) renderGlossary(lesson);
+}
+
+function glossarySelect(origIndex) {
+    glossaryState.selectedTermIndex = origIndex;
+    const lesson = allLessons[currentLessonId];
+    if (lesson) renderGlossary(lesson);
+    window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 /* ===== ТЕСТ ===== */

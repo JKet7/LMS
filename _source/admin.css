@@ -99,12 +99,10 @@
     --radius-md: 10px;
     --radius-lg: 14px;
 }
-/* ============================================================
-   ЧАСТЬ 1 — ТЁМНАЯ ТЕМА
-   Замени этим блоком старый [data-theme="dark"] { ... }
-   в файлах admin.css и index.css
-   ============================================================ */
 
+/* ============================================================
+   ЧАСТЬ 1 — ТЁМНАЯ ТЕМА (почти чёрная)
+   ============================================================ */
 [data-theme="dark"] {
     --bg: #0A0A0A;
     --bg-soft: #141414;
@@ -149,6 +147,24 @@
     --nav-current: #1E40AF;
     --nav-current-soft: rgba(30,64,175,.25);
 }
+
+/* --- Match: выбранный и соединённый (без заливки) --- */
+.match-item.selected {
+    border-color: var(--nav-current);
+    border-width: 2px;
+    background: transparent;
+    color: var(--nav-current);
+    font-weight: 700;
+}
+.match-item.matched {
+    border-color: var(--success);
+    border-width: 2px;
+    background: transparent;
+    color: var(--success);
+    cursor: default;
+    font-weight: 700;
+}
+
 /* ===== База ===== */
 * { box-sizing: border-box; }
 body {
@@ -438,7 +454,8 @@ textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
     transition: all .15s;
     display: inline-flex; align-items: center; justify-content: center;
 }
-.mini-icon-btn:hover { background: var(--hover-strong); color: var(--text); }
+.mini-icon-btn:hover:not(:disabled) { background: var(--hover-strong); color: var(--text); }
+.mini-icon-btn:disabled { opacity: .3; cursor: default; }
 .mini-icon-btn.del:hover { background: var(--error-bg); color: var(--error); }
 .mini-icon-btn.dup:hover { background: var(--success-bg); color: var(--success); }
 
@@ -1206,10 +1223,162 @@ textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
     border-top: 1px solid var(--border);
 }
 .csv-modal-actions .btn { padding: 10px 20px; }
+
+/* ===== Поиск в сайдбаре (глоссарий) ===== */
+#term-search-wrap {
+    margin-bottom: 10px;
+}
+#term-search-wrap .input {
+    font-size: 13px;
+    padding: 8px 12px;
+}
+
+/* ===== Ключ блока в списке ===== */
+.lesson-item .lkey {
+    display: inline-block;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 10px;
+    color: var(--text-disabled);
+    background: rgba(0, 0, 0, .05);
+    padding: 1px 6px;
+    border-radius: 4px;
+    margin-top: 4px;
+    cursor: pointer;
+    transition: all .15s;
+    user-select: none;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+[data-theme="dark"] .lesson-item .lkey {
+    background: rgba(255, 255, 255, .08);
+}
+.lesson-item .lkey:hover {
+    background: var(--primary-soft);
+    color: var(--primary);
+}
+.lesson-item.current .lkey {
+    color: var(--primary);
+    background: rgba(255, 255, 255, .5);
+}
+[data-theme="dark"] .lesson-item.current .lkey {
+    background: rgba(0, 0, 0, .3);
+}
+
+/* ===== РЕДАКТОР СПИСКА ===== */
+.list-editor {
+    padding: 8px 0;
+}
+.list-editor-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+}
+.list-editor-style-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-muted);
+}
+.list-editor-style-select {
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-family: inherit;
+    font-size: 13px;
+    background: var(--input-bg);
+    color: var(--text);
+    cursor: pointer;
+    outline: none;
+    transition: all .15s;
+}
+.list-editor-style-select:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--primary-soft);
+}
+.list-editor-items {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.list-editor-empty {
+    font-size: 13px;
+    color: var(--text-muted);
+    font-style: italic;
+    padding: 8px 4px;
+}
+.list-editor-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    position: relative;
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+    border-left: 3px solid transparent;
+    transition: all .15s;
+}
+.list-editor-row:hover {
+    background: var(--hover);
+}
+.list-editor-row[data-level="0"] {
+    margin-left: 0;
+    border-left-color: var(--primary);
+    padding-left: 10px;
+}
+.list-editor-row[data-level="1"] {
+    margin-left: 24px;
+    border-left-color: var(--secondary);
+    padding-left: 10px;
+}
+.list-editor-row[data-level="2"] {
+    margin-left: 48px;
+    border-left-color: var(--memo-accent);
+    padding-left: 10px;
+}
+.list-editor-marker {
+    font-size: 15px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+    min-width: 20px;
+    text-align: center;
+    font-weight: 700;
+}
+.list-editor-input {
+    flex: 1;
+    padding: 6px 10px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    font-family: inherit;
+    font-size: 14px;
+    background: transparent;
+    color: var(--text);
+    outline: none;
+    transition: all .15s;
+}
+.list-editor-input:hover {
+    background: var(--card-bg);
+    border-color: var(--border);
+}
+.list-editor-input:focus {
+    background: var(--input-bg-focus);
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px var(--primary-soft);
+}
+.list-editor-tools {
+    display: flex;
+    gap: 2px;
+    opacity: .3;
+    transition: opacity .15s;
+}
+.list-editor-row:hover .list-editor-tools {
+    opacity: 1;
+}
+
 /* ============================================================
    ЧАСТЬ 2 — ПРОЗРАЧНЫЕ КНОПКИ
-   Добавь этот блок В КОНЕЦ файла admin.css и index.css
-   (один раз, после остальных стилей).
    ============================================================ */
 
 /* --- Основная кнопка (.btn-primary) --- */
@@ -1223,88 +1392,58 @@ textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
     color: #fff;
 }
 
-/* --- Кнопка «Завершить блок» / «Дальше» (.nav-btn.primary) --- */
-.nav-btn.primary {
+/* --- Кнопка «Дальше» в предпросмотре (.pv-nav-btn.primary) --- */
+.pv-nav-btn.primary {
     background: transparent;
     color: var(--primary);
     border-color: var(--primary);
     border-width: 2px;
 }
-.nav-btn.primary:hover:not(:disabled) {
+.pv-nav-btn.primary:hover:not(:disabled) {
     background: var(--primary);
     color: #fff;
     border-color: var(--primary);
 }
 
-/* --- Кнопка «Дальше» в тесте (.quiz-nav-btn.primary) --- */
-.quiz-nav-btn.primary {
-    background: transparent;
-    color: var(--primary);
-    border-color: var(--primary);
-    border-width: 2px;
-}
-.quiz-nav-btn.primary:hover:not(:disabled) {
-    background: var(--primary);
-    color: #fff;
-    border-color: var(--primary);
-}
-
-/* --- Кнопка «Проверить» (.quiz-nav-btn.check) --- */
-.quiz-nav-btn.check {
+/* --- Кнопка «Проверить» в предпросмотре (.pv-nav-btn.check) --- */
+.pv-nav-btn.check {
     background: transparent;
     color: var(--success);
     border-color: var(--success);
     border-width: 2px;
 }
-.quiz-nav-btn.check:hover:not(:disabled) {
+.pv-nav-btn.check:hover:not(:disabled) {
     background: var(--success);
     color: #fff;
 }
 
-/* --- Варианты ответов в тесте (без заливки) --- */
-.quiz-opt.selected {
+/* --- Варианты ответов в предпросмотре (без заливки) --- */
+.pv-opt.selected {
     background: transparent;
     border: 2px solid var(--primary);
     color: var(--primary);
-    font-weight: 500;
 }
-.quiz-opt.correct {
+.pv-opt.correct {
     background: transparent;
     border: 2px solid var(--success);
     color: var(--success);
-    font-weight: 500;
 }
-.quiz-opt.wrong {
+.pv-opt.wrong {
     background: transparent;
     border: 2px solid var(--error);
     color: var(--error);
 }
 
-/* --- Сетка навигации теста (без заливки) --- */
-.quiz-nav-num.correct {
+/* --- Match в предпросмотре (без заливки) --- */
+.pv-match-item.selected {
     background: transparent;
-    border: 2px solid var(--success);
-    color: var(--success);
-}
-.quiz-nav-num.wrong {
-    background: transparent;
-    border: 2px solid var(--error);
-    color: var(--error);
-}
-
-/* --- Match: выбранный и соединённый (без заливки) --- */
-.match-item.selected {
     border-color: var(--nav-current);
     border-width: 2px;
-    background: transparent;
     color: var(--nav-current);
-    font-weight: 700;
 }
-.match-item.matched {
+.pv-match-item.matched {
+    background: transparent;
     border-color: var(--success);
     border-width: 2px;
-    background: transparent;
     color: var(--success);
-    cursor: default;
-    font-weight: 700;
 }

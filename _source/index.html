@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title id="page-title">Курс</title>
     <script>
-        // Anti-FOUC: применяем тему до первой отрисовки
         (function() {
             try {
                 var t = localStorage.getItem("kp_course_theme");
@@ -40,6 +39,7 @@
                 <div class="lesson-header">
                     <div class="lesson-title" id="lesson-title"></div>
                     <div class="header-right">
+                        <button class="btn btn-text print-hide" id="back-btn-lesson" onclick="goBack()" style="display:none;">← Назад</button>
                         <button class="btn-icon print-hide" onclick="printCurrent()" title="Сохранить в PDF">📄</button>
                         <button class="btn-icon print-hide" onclick="toggleTheme()" title="Сменить тему">🌙</button>
                         <button class="btn btn-text print-hide" onclick="exitToMenu()">← В меню</button>
@@ -69,6 +69,7 @@
                     <div class="lesson-title" id="quiz-title"></div>
                     <div class="header-right">
                         <span class="timer print-hide" id="quiz-timer">00:00</span>
+                        <button class="btn btn-text print-hide" id="back-btn-quiz" onclick="goBack()" style="display:none;">← Назад</button>
                         <button class="btn-icon print-hide" onclick="printCurrent()" title="Сохранить в PDF">📄</button>
                         <button class="btn-icon print-hide" onclick="toggleTheme()" title="Сменить тему">🌙</button>
                         <button class="btn btn-text print-hide" onclick="exitToMenu()">← В меню</button>
@@ -95,12 +96,42 @@
         <div class="memo-screen-header">
             <h1 class="memo-screen-title" id="memo-title"></h1>
             <div class="header-right">
+                <button class="btn btn-text print-hide" id="back-btn-memo" onclick="goBack()" style="display:none;">← Назад</button>
                 <button class="btn-icon print-hide" onclick="printCurrent()" title="Сохранить в PDF">📄</button>
                 <button class="btn-icon print-hide" onclick="toggleTheme()" title="Сменить тему">🌙</button>
                 <button class="btn btn-text print-hide" onclick="exitToMenu()">← В меню</button>
             </div>
         </div>
         <div class="memo-grid" id="memo-grid"></div>
+    </div>
+
+    <div class="screen" id="screen-glossary">
+        <div class="card">
+            <div class="card-body">
+                <div class="lesson-header">
+                    <div class="lesson-title" id="glossary-title"></div>
+                    <div class="header-right">
+                        <button class="btn btn-text print-hide" id="back-btn-glossary" onclick="goBack()" style="display:none;">← Назад</button>
+                        <button class="btn-icon print-hide" onclick="toggleTheme()" title="Сменить тему">🌙</button>
+                        <button class="btn btn-text print-hide" onclick="exitToMenu()">← В меню</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="glossary-layout">
+            <aside class="glossary-sidebar">
+                <div class="glossary-search-wrap">
+                    <input type="text" class="glossary-search" id="glossary-search" placeholder="🔍 Поиск..." oninput="onGlossarySearch()">
+                </div>
+                <nav class="glossary-list" id="glossary-list"></nav>
+            </aside>
+            <div class="glossary-main">
+                <div class="card">
+                    <div class="card-body" id="glossary-content"></div>
+                </div>
+            </div>
+        </div>
     </div>
 
 </div>

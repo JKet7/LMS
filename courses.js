@@ -14,5 +14,6 @@
    ============================================================ */
 
 const COURSES = [
-    { folder: "EN", title: "EN" }
+    { folder: "EN", title: "English language" },
+    { folder: "Test", title: "Test" }
 ];

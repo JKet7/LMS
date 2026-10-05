@@ -6,9 +6,54 @@
 let state = { currentLessonId: null, currentSlideIndex: 0 };
 const THEME_KEY = "kp_course_theme";
 
-// Уникальный ключ курса. Берётся из courseSettings.courseKey.
-// Если его нет — fallback на "default" (для старых курсов).
-const COURSE_KEY = (typeof courseSettings !== "undefined" && courseSettings && courseSettings.courseKey)
+// ============================================================
+// ЗАЩИТА ОТ ПОВРЕЖДЁННОГО data.js
+// ============================================================
+(function checkData() {
+    let problem = null;
+
+    if (typeof courseSettings === "undefined") {
+        problem = "Файл <code>data.js</code> не загрузился или содержит синтаксическую ошибку (переменная <code>courseSettings</code> не найдена).";
+    } else if (typeof allLessons === "undefined") {
+        problem = "В <code>data.js</code> отсутствует переменная <code>allLessons</code>.";
+    } else if (allLessons === null || typeof allLessons !== "object" || Array.isArray(allLessons)) {
+        problem = "Переменная <code>allLessons</code> в <code>data.js</code> должна быть объектом (словарь блоков).";
+    }
+
+    if (problem) {
+        showFatalError(problem);
+        throw new Error("data.js check failed");
+    }
+})();
+
+function showFatalError(reason) {
+    document.body.innerHTML = `
+        <div style="
+            font-family: 'M PLUS Rounded 1c', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            max-width: 640px;
+            margin: 80px auto;
+            padding: 32px 24px;
+            background: #FAF6EC;
+            border: 1px solid #E0D6C0;
+            border-radius: 14px;
+            box-shadow: 0 1px 2px rgba(43,43,43,.08);
+            color: #1A1A1A;
+            line-height: 1.6;
+        ">
+            <h1 style="margin: 0 0 12px; font-size: 22px; font-weight: 700; color: #000;">⚠ Редактор не загрузился</h1>
+            <p style="margin: 0 0 16px; font-size: 15px; color: #4A4540;">${reason}</p>
+            <div style="padding: 14px 18px; background: #F0D8DC; border-left: 4px solid #8B1A2B; border-radius: 8px; font-size: 14px; line-height: 1.7;">
+                <strong>Что делать:</strong><br>
+                1. Открой файл <code style="background: rgba(0,0,0,.06); padding: 2px 6px; border-radius: 4px; font-family: ui-monospace, Menlo, Consolas, monospace;">data.js</code> в редакторе кода (VS Code).<br>
+                2. Проверь, что он не повреждён: все скобки <code>{ }</code> и <code>[ ]</code> закрыты, запятые на месте.<br>
+                3. Если правил <code>data.js</code> вручную — верни последнюю рабочую версию через Git или из резервной копии.<br>
+                4. Если файл целый — обнови страницу (<code style="background: rgba(0,0,0,.06); padding: 2px 6px; border-radius: 4px; font-family: ui-monospace, Menlo, Consolas, monospace;">Ctrl+F5</code>).
+            </div>
+        </div>
+    `;
+}
+
+const COURSE_KEY = (courseSettings && courseSettings.courseKey)
     ? String(courseSettings.courseKey).trim()
     : "default";
 
@@ -18,6 +63,8 @@ const PROGRESS_KEY = "kp_course_v1_" + COURSE_KEY;
 const MAX_MEMO_CELLS = 8;
 const MAX_TABLE_ROWS = 10;
 const MAX_TABLE_COLS = 10;
+const MAX_LIST_LEVEL = 2; // уровни 0, 1, 2 — три уровня
+
 let pvState = null;
 
 function normalizeCorrect(correct) {
@@ -31,6 +78,30 @@ function detectType(q) {
     const c = normalizeCorrect(q.correct);
     return c.length > 1 ? "multi" : "single";
 }
+
+// ============================================================
+// Миграция: старые строки в items[] → {text, level}
+// ============================================================
+function migrateListBlock(b) {
+    if (!b || b.type !== "ul") return;
+    if (!b.style) b.style = "bullet";
+    if (!Array.isArray(b.items)) b.items = [];
+    b.items = b.items.map(item => {
+        if (typeof item === "string") return { text: item, level: 0 };
+        if (item && typeof item === "object") {
+            if (item.level === undefined) item.level = 0;
+            if (item.text === undefined) item.text = "";
+            return item;
+        }
+        return { text: String(item || ""), level: 0 };
+    });
+}
+
+function migrateListBlocksInContent(content) {
+    if (!Array.isArray(content)) return;
+    content.forEach(b => migrateListBlock(b));
+}
+
 Object.values(allLessons).forEach(lesson => {
     if (lesson.type === "quiz") {
         if (!lesson.groups) lesson.groups = [];
@@ -50,6 +121,14 @@ Object.values(allLessons).forEach(lesson => {
         lesson.cells.forEach(cell => {
             if (!cell.content) cell.content = [];
             if (cell.title === undefined) cell.title = "";
+            migrateListBlocksInContent(cell.content);
+        });
+    } else if (lesson.type === "glossary") {
+        if (!lesson.terms) lesson.terms = [];
+        lesson.terms.forEach(term => {
+            if (!term.content) term.content = [];
+            if (term.name === undefined) term.name = "";
+            migrateListBlocksInContent(term.content);
         });
     }
 });
@@ -58,6 +137,7 @@ Object.values(allLessons).forEach(lesson => {
     if (lesson.type === "theory" && lesson.slides) {
         lesson.slides.forEach(slide => {
             if (!slide.content) slide.content = [];
+            migrateListBlocksInContent(slide.content);
             if (slide.video && slide.video.trim()) {
                 const hasVideo = slide.content.some(b => b.type === "video");
                 if (!hasVideo) slide.content.unshift({ type: "video", src: slide.video });
@@ -116,6 +196,19 @@ function init() {
                         lesson.cells.forEach(cell => {
                             if (!cell.content) cell.content = [];
                             if (cell.title === undefined) cell.title = "";
+                            migrateListBlocksInContent(cell.content);
+                        });
+                    } else if (lesson.type === "glossary") {
+                        if (!lesson.terms) lesson.terms = [];
+                        lesson.terms.forEach(term => {
+                            if (!term.content) term.content = [];
+                            if (term.name === undefined) term.name = "";
+                            migrateListBlocksInContent(term.content);
+                        });
+                    } else if (lesson.type === "theory" && lesson.slides) {
+                        lesson.slides.forEach(slide => {
+                            if (!slide.content) slide.content = [];
+                            migrateListBlocksInContent(slide.content);
                         });
                     }
                 });
@@ -136,12 +229,14 @@ function refreshAll() {
     renderLessonList();
     const lesson = currentLesson();
     document.getElementById("lesson-title-input").value = lesson.title;
-    const typeLabels = { quiz: "Тест", theory: "Теория", memo: "Памятка" };
+    const typeLabels = { quiz: "Тест", theory: "Теория", memo: "Памятка", glossary: "Глоссарий" };
     document.getElementById("lesson-type-display").value = typeLabels[lesson.type] || lesson.type;
 
     document.getElementById("theory-editor").style.display = "none";
     document.getElementById("quiz-editor").style.display = "none";
     document.getElementById("memo-editor").style.display = "none";
+    document.getElementById("glossary-editor").style.display = "none";
+    document.getElementById("term-search-wrap").style.display = "none";
 
     if (lesson.type === "quiz") {
         document.getElementById("quiz-editor").style.display = "block";
@@ -154,6 +249,13 @@ function refreshAll() {
         document.getElementById("cells-section-title").textContent = "Ячейки памятки";
         document.getElementById("add-slide-btn").textContent = "＋ Ячейка";
         renderCellsList(); renderCell();
+    } else if (lesson.type === "glossary") {
+        document.getElementById("glossary-editor").style.display = "block";
+        document.getElementById("slides-card").style.display = "block";
+        document.getElementById("term-search-wrap").style.display = "block";
+        document.getElementById("cells-section-title").textContent = "Термины глоссария";
+        document.getElementById("add-slide-btn").textContent = "＋ Термин";
+        renderTermsList(); renderTerm();
     } else {
         document.getElementById("theory-editor").style.display = "block";
         document.getElementById("slides-card").style.display = "block";
@@ -181,13 +283,27 @@ function renderLessonList() {
             typeLabel = "Памятка";
             const n = (l.cells || []).length;
             count = `${n} ${pluralizeCells(n)}`;
+        } else if (l.type === "glossary") {
+            typeLabel = "Глоссарий";
+            const n = (l.terms || []).length;
+            count = `${n} ${pluralizeTerms(n)}`;
         } else {
             typeLabel = "Теория";
             count = `${l.slides.length} слайдов`;
         }
-        btn.innerHTML = `${l.title}<span class="ltype">${typeLabel} · ${count}</span>`;
+        const safeId = escapeHtml(id);
+        const safeTitle = escapeHtml(l.title);
+        btn.innerHTML = `${safeTitle}<span class="ltype">${typeLabel} · ${count}</span><span class="lkey" title="Кликни, чтобы скопировать ключ">${safeId}</span>`;
         btn.onclick = () => { readFromDom(); state.currentLessonId = id; state.currentSlideIndex = 0; refreshAll(); };
         row.appendChild(btn);
+
+        const keyEl = btn.querySelector(".lkey");
+        if (keyEl) {
+            keyEl.addEventListener("click", (e) => {
+                e.stopPropagation();
+                copyToClipboard(id);
+            });
+        }
 
         const exp = document.createElement("button");
         exp.className = "icon-btn-sm export"; exp.textContent = "📤";
@@ -213,12 +329,50 @@ function renderLessonList() {
     });
 }
 
+function copyToClipboard(text) {
+    const onSuccess = () => setStatus("📋 Ключ скопирован: " + text, "ok");
+    const onFail = () => setStatus("⚠ Не удалось скопировать. Ключ: " + text, "err");
+    try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(onSuccess).catch(() => {
+                const ta = document.createElement("textarea");
+                ta.value = text;
+                ta.style.position = "fixed";
+                ta.style.opacity = "0";
+                document.body.appendChild(ta);
+                ta.select();
+                try { document.execCommand("copy"); onSuccess(); } catch(e) { onFail(); }
+                document.body.removeChild(ta);
+            });
+        } else {
+            const ta = document.createElement("textarea");
+            ta.value = text;
+            ta.style.position = "fixed";
+            ta.style.opacity = "0";
+            document.body.appendChild(ta);
+            ta.select();
+            try { document.execCommand("copy"); onSuccess(); } catch(e) { onFail(); }
+            document.body.removeChild(ta);
+        }
+    } catch (e) {
+        onFail();
+    }
+}
+
 function pluralizeCells(n) {
     const mod10 = n % 10;
     const mod100 = n % 100;
     if (mod10 === 1 && mod100 !== 11) return "ячейка";
     if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return "ячейки";
     return "ячеек";
+}
+
+function pluralizeTerms(n) {
+    const mod10 = n % 10;
+    const mod100 = n % 100;
+    if (mod10 === 1 && mod100 !== 11) return "термин";
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return "термина";
+    return "терминов";
 }
 
 function moveLesson(id, direction) {
@@ -297,6 +451,365 @@ function renderCell() {
     const box = document.getElementById("memo-content");
     box.innerHTML = "";
     (cell.content || []).forEach((b, i) => box.appendChild(createBlockElement(b, i, "memo")));
+}
+
+/* ===== ГЛОССАРИЙ ===== */
+function getSortedTermsWithIndexes(lesson) {
+    const arr = (lesson.terms || []).map((term, origIndex) => ({ term, origIndex }));
+    arr.sort((a, b) => {
+        const na = String(a.term.name || "").trim().toLowerCase();
+        const nb = String(b.term.name || "").trim().toLowerCase();
+        if (na < nb) return -1;
+        if (na > nb) return 1;
+        return a.origIndex - b.origIndex;
+    });
+    return arr;
+}
+
+function renderTermsList() {
+    const lesson = currentLesson();
+    const list = document.getElementById("slide-list");
+    list.innerHTML = "";
+
+    const sorted = getSortedTermsWithIndexes(lesson);
+
+    const searchEl = document.getElementById("term-search");
+    const query = searchEl ? String(searchEl.value || "").trim().toLowerCase() : "";
+
+    let shown = 0;
+    sorted.forEach(item => {
+        const name = String(item.term.name || "").trim();
+        if (query && !name.toLowerCase().includes(query)) return;
+        shown++;
+
+        const btn = document.createElement("button");
+        btn.className = "slide-item" + (item.origIndex === state.currentSlideIndex ? " current" : "");
+        const title = name || "(без названия)";
+        btn.textContent = title;
+        btn.onclick = () => {
+            readFromDom();
+            state.currentSlideIndex = item.origIndex;
+            renderTermsList();
+            renderTerm();
+        };
+        list.appendChild(btn);
+    });
+
+    if (shown === 0 && query) {
+        const empty = document.createElement("div");
+        empty.style.cssText = "font-size:13px;color:var(--text-muted);font-style:italic;padding:8px 4px;";
+        empty.textContent = "Ничего не найдено";
+        list.appendChild(empty);
+    }
+
+    const addBtn = document.getElementById("add-slide-btn");
+    addBtn.disabled = false;
+    addBtn.title = "";
+    addBtn.style.opacity = "";
+    addBtn.style.cursor = "";
+}
+
+function renderTerm() {
+    const lesson = currentLesson();
+    const term = (lesson.terms || [])[state.currentSlideIndex];
+    if (!term) {
+        document.getElementById("term-name-input").value = "";
+        document.getElementById("term-content").innerHTML = "";
+        return;
+    }
+    document.getElementById("term-name-input").value = term.name || "";
+    const box = document.getElementById("term-content");
+    box.innerHTML = "";
+    (term.content || []).forEach((b, i) => box.appendChild(createBlockElement(b, i, "glossary")));
+}
+
+function addTermBlock(type) {
+    readFromDom();
+    const term = currentLesson().terms[state.currentSlideIndex];
+    if (!term) return;
+    const nb = makeNewBlock(type);
+    term.content.push(nb); renderTerm(); saveDraft();
+}
+
+function removeTermBlock(btn) {
+    readFromDom();
+    const idx = parseInt(btn.closest(".block-wrapper").dataset.index);
+    currentLesson().terms[state.currentSlideIndex].content.splice(idx, 1);
+    renderTerm(); saveDraft();
+}
+
+function moveTermBlock(btn, dir) {
+    readFromDom();
+    const idx = parseInt(btn.closest(".block-wrapper").dataset.index);
+    const ni = idx + dir;
+    const term = currentLesson().terms[state.currentSlideIndex];
+    if (ni < 0 || ni >= term.content.length) return;
+    const [it] = term.content.splice(idx, 1);
+    term.content.splice(ni, 0, it);
+    renderTerm(); saveDraft();
+}
+
+/* ===== РЕДАКТОР СПИСКА ===== */
+function createListEditor(block) {
+    const wrap = document.createElement("div");
+    wrap.className = "list-editor";
+
+    if (!block.style) block.style = "bullet";
+    if (!Array.isArray(block.items)) block.items = [];
+    // Мигрируем на всякий случай
+    block.items = block.items.map(item => {
+        if (typeof item === "string") return { text: item, level: 0 };
+        if (item && typeof item === "object") {
+            if (item.level === undefined) item.level = 0;
+            if (item.text === undefined) item.text = "";
+            return item;
+        }
+        return { text: String(item || ""), level: 0 };
+    });
+
+    // Шапка: селект стиля
+    const header = document.createElement("div");
+    header.className = "list-editor-header";
+
+    const styleLabel = document.createElement("label");
+    styleLabel.className = "list-editor-style-label";
+    styleLabel.textContent = "Стиль:";
+    header.appendChild(styleLabel);
+
+    const styleSel = document.createElement("select");
+    styleSel.className = "list-editor-style-select";
+    [
+        { v: "bullet",   t: "• Точки" },
+        { v: "number",   t: "1. Цифры" },
+        { v: "checkbox", t: "☐ Чекбоксы" }
+    ].forEach(opt => {
+        const o = document.createElement("option");
+        o.value = opt.v; o.textContent = opt.t;
+        if (block.style === opt.v) o.selected = true;
+        styleSel.appendChild(o);
+    });
+    styleSel.addEventListener("change", () => {
+        block.style = styleSel.value;
+        renderItems();
+        onFieldChange();
+    });
+    header.appendChild(styleSel);
+
+    wrap.appendChild(header);
+
+    // Контейнер пунктов
+    const itemsBox = document.createElement("div");
+    itemsBox.className = "list-editor-items";
+    wrap.appendChild(itemsBox);
+
+    // Кнопка «＋ пункт» снизу
+    const addWrap = document.createElement("div");
+    addWrap.style.marginTop = "8px";
+    const addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.className = "btn btn-outline";
+    addBtn.textContent = "＋ Добавить пункт";
+    addBtn.style.padding = "6px 14px";
+    addBtn.style.fontSize = "13px";
+    addBtn.onclick = () => {
+        block.items.push({ text: "Новый пункт", level: 0 });
+        renderItems();
+        onFieldChange();
+    };
+    addWrap.appendChild(addBtn);
+    wrap.appendChild(addWrap);
+
+    // Функция отрисовки пунктов
+    function renderItems() {
+        itemsBox.innerHTML = "";
+        if (block.items.length === 0) {
+            const empty = document.createElement("div");
+            empty.className = "list-editor-empty";
+            empty.textContent = "Список пустой. Нажми «＋ Добавить пункт».";
+            itemsBox.appendChild(empty);
+            return;
+        }
+        block.items.forEach((item, idx) => {
+            itemsBox.appendChild(createItemRow(item, idx));
+        });
+    }
+
+    function createItemRow(item, idx) {
+        const row = document.createElement("div");
+        row.className = "list-editor-row";
+        row.dataset.level = item.level;
+        row.dataset.idx = idx;
+
+        // Маркер
+        const marker = document.createElement("span");
+        marker.className = "list-editor-marker";
+        if (block.style === "bullet") {
+            if (item.level === 0) marker.textContent = "•";
+            else if (item.level === 1) marker.textContent = "◦";
+            else marker.textContent = "▪";
+        } else if (block.style === "number") {
+            marker.textContent = (idx + 1) + ".";
+        } else if (block.style === "checkbox") {
+            marker.textContent = "☐";
+        }
+        row.appendChild(marker);
+
+        // Поле текста
+        const inp = document.createElement("input");
+        inp.type = "text";
+        inp.className = "list-editor-input";
+        inp.value = item.text || "";
+        inp.placeholder = "Текст пункта";
+        inp.addEventListener("input", () => {
+            item.text = inp.value;
+            onFieldChange();
+        });
+        inp.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                // Новый пункт того же уровня ниже
+                block.items.splice(idx + 1, 0, { text: "", level: item.level });
+                renderItems();
+                // Фокус на новый инпут
+                setTimeout(() => {
+                    const newRow = itemsBox.querySelectorAll(".list-editor-row")[idx + 1];
+                    if (newRow) {
+                        const newInp = newRow.querySelector(".list-editor-input");
+                        if (newInp) newInp.focus();
+                    }
+                }, 0);
+                onFieldChange();
+            } else if (e.key === "Tab" && !e.shiftKey) {
+                e.preventDefault();
+                if (item.level < MAX_LIST_LEVEL) {
+                    item.level++;
+                    renderItems();
+                    // Восстанавливаем фокус на тот же пункт
+                    setTimeout(() => {
+                        const sameRow = itemsBox.querySelectorAll(".list-editor-row")[idx];
+                        if (sameRow) {
+                            const sameInp = sameRow.querySelector(".list-editor-input");
+                            if (sameInp) sameInp.focus();
+                        }
+                    }, 0);
+                    onFieldChange();
+                }
+            } else if (e.key === "Tab" && e.shiftKey) {
+                e.preventDefault();
+                if (item.level > 0) {
+                    item.level--;
+                    renderItems();
+                    setTimeout(() => {
+                        const sameRow = itemsBox.querySelectorAll(".list-editor-row")[idx];
+                        if (sameRow) {
+                            const sameInp = sameRow.querySelector(".list-editor-input");
+                            if (sameInp) sameInp.focus();
+                        }
+                    }, 0);
+                    onFieldChange();
+                }
+            }
+        });
+        // Копипаст многострочного текста → каждый перенос = новый пункт
+        inp.addEventListener("paste", (e) => {
+            const text = (e.clipboardData || window.clipboardData).getData("text/plain") || "";
+            if (!text) return;
+            const lines = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+            if (lines.length <= 1) {
+                // обычная вставка одного значения
+                return;
+            }
+            e.preventDefault();
+            // Заменяем строку: первый в текущий пункт, остальные добавляем ниже
+            const first = lines[0];
+            const rest = lines.slice(1);
+            item.text = first;
+            rest.forEach((line, i) => {
+                block.items.splice(idx + 1 + i, 0, { text: line, level: item.level });
+            });
+            renderItems();
+            setTimeout(() => {
+                const sameRow = itemsBox.querySelectorAll(".list-editor-row")[idx];
+                if (sameRow) {
+                    const sameInp = sameRow.querySelector(".list-editor-input");
+                    if (sameInp) sameInp.focus();
+                }
+            }, 0);
+            onFieldChange();
+        });
+        row.appendChild(inp);
+
+        // Кнопки
+        const tools = document.createElement("div");
+        tools.className = "list-editor-tools";
+
+        const upLvlBtn = document.createElement("button");
+        upLvlBtn.type = "button";
+        upLvlBtn.className = "mini-icon-btn";
+        upLvlBtn.textContent = "⇤";
+        upLvlBtn.title = "Поднять уровень (Shift+Tab)";
+        upLvlBtn.disabled = item.level <= 0;
+        upLvlBtn.onclick = () => {
+            if (item.level > 0) {
+                item.level--;
+                renderItems();
+                onFieldChange();
+            }
+        };
+        tools.appendChild(upLvlBtn);
+
+        const downLvlBtn = document.createElement("button");
+        downLvlBtn.type = "button";
+        downLvlBtn.className = "mini-icon-btn";
+        downLvlBtn.textContent = "⇥";
+        downLvlBtn.title = "Углубить (Tab)";
+        downLvlBtn.disabled = item.level >= MAX_LIST_LEVEL;
+        downLvlBtn.onclick = () => {
+            if (item.level < MAX_LIST_LEVEL) {
+                item.level++;
+                renderItems();
+                onFieldChange();
+            }
+        };
+        tools.appendChild(downLvlBtn);
+
+        const addBtn2 = document.createElement("button");
+        addBtn2.type = "button";
+        addBtn2.className = "mini-icon-btn";
+        addBtn2.textContent = "＋";
+        addBtn2.title = "Добавить пункт ниже";
+        addBtn2.onclick = () => {
+            block.items.splice(idx + 1, 0, { text: "", level: item.level });
+            renderItems();
+            setTimeout(() => {
+                const newRow = itemsBox.querySelectorAll(".list-editor-row")[idx + 1];
+                if (newRow) {
+                    const newInp = newRow.querySelector(".list-editor-input");
+                    if (newInp) newInp.focus();
+                }
+            }, 0);
+            onFieldChange();
+        };
+        tools.appendChild(addBtn2);
+
+        const delBtn = document.createElement("button");
+        delBtn.type = "button";
+        delBtn.className = "mini-icon-btn del";
+        delBtn.textContent = "✕";
+        delBtn.title = "Удалить пункт";
+        delBtn.onclick = () => {
+            block.items.splice(idx, 1);
+            renderItems();
+            onFieldChange();
+        };
+        tools.appendChild(delBtn);
+
+        row.appendChild(tools);
+        return row;
+    }
+
+    renderItems();
+    return wrap;
 }
 
 function createTableBody(block) {
@@ -459,26 +972,14 @@ function createBlockElement(block, index, context) {
         editable.contentEditable = "true";
         editable.innerHTML = block.text || "";
     } else if (block.type === "ul") {
-        editable = document.createElement("ul");
-        (block.items || []).forEach(item => {
-            const li = document.createElement("li");
-            const sp = document.createElement("span");
-            sp.className = "li-text"; sp.contentEditable = "true"; sp.innerHTML = item;
-            sp.addEventListener("paste", handlePaste);
-            li.appendChild(sp);
-            const tools = document.createElement("div");
-            tools.className = "li-tools";
-            tools.innerHTML = `<button class="mini-icon-btn" onclick="addListItem(this)">＋</button><button class="mini-icon-btn del" onclick="removeListItem(this)">✕</button>`;
-            li.appendChild(tools);
-            editable.appendChild(li);
-        });
+        editable = createListEditor(block);
     } else if (block.type === "link") {
         editable = document.createElement("div");
         editable.className = "link-editor";
         editable.innerHTML = `
             <div class="link-text-row"><span>🔗</span><span class="link-text" contenteditable="true">${block.text || "Ссылка"}</span></div>
-            <div class="url-row"><span>URL:</span><input type="text" class="link-url" value="${(block.href || "").replace(/"/g, '&quot;')}" placeholder="https://... или #lessonId:3"></div>
-            <div class="url-hint">Внешние: https://... | файлы: files/doc.pdf | внутри: #smarts или #smarts:3</div>`;
+            <div class="url-row"><span>URL:</span><input type="text" class="link-url" value="${(block.href || "").replace(/"/g, '&quot;')}" placeholder="https://... или #ключ_блока:3"></div>
+            <div class="url-hint">Внешние: https://... | внутри курса: #ключ_блока или #ключ_блока:3<br>Ключ блока — серая плашка в списке блоков слева (кликни — скопируется)</div>`;
         editable.querySelector(".link-url").addEventListener("input", onFieldChange);
         editable.querySelector(".link-text").addEventListener("paste", handlePaste);
     } else if (block.type === "image") {
@@ -503,8 +1004,17 @@ function createBlockElement(block, index, context) {
 
     const tools = document.createElement("div");
     tools.className = "block-tools";
-    const moveHandlerPrefix = context === "memo" ? "moveMemoBlock" : "moveBlock";
-    const removeHandlerPrefix = context === "memo" ? "removeMemoBlock" : "removeBlock";
+    let moveHandlerPrefix, removeHandlerPrefix;
+    if (context === "memo") {
+        moveHandlerPrefix = "moveMemoBlock";
+        removeHandlerPrefix = "removeMemoBlock";
+    } else if (context === "glossary") {
+        moveHandlerPrefix = "moveTermBlock";
+        removeHandlerPrefix = "removeTermBlock";
+    } else {
+        moveHandlerPrefix = "moveBlock";
+        removeHandlerPrefix = "removeBlock";
+    }
     tools.innerHTML = `<button class="mini-icon-btn" onclick="${moveHandlerPrefix}(this, -1)" title="Вверх">↑</button><button class="mini-icon-btn" onclick="${moveHandlerPrefix}(this, 1)" title="Вниз">↓</button><button class="mini-icon-btn del" onclick="${removeHandlerPrefix}(this)" title="Удалить">✕</button>`;
     wrapper.appendChild(tools);
 
@@ -648,7 +1158,15 @@ function addMemoBlock(type) {
 function makeNewBlock(type) {
     if (type === "p") return { type: "p", text: "Новый абзац" };
     if (type === "h3") return { type: "h3", text: "Новый подзаголовок" };
-    if (type === "ul") return { type: "ul", items: ["Первый пункт", "Второй пункт", "Третий пункт"] };
+    if (type === "ul") return {
+        type: "ul",
+        style: "bullet",
+        items: [
+            { text: "Первый пункт", level: 0 },
+            { text: "Второй пункт", level: 0 },
+            { text: "Третий пункт", level: 0 }
+        ]
+    };
     if (type === "quote") return { type: "quote", text: "Выделенная мысль" };
     if (type === "link") return { type: "link", text: "Текст ссылки", href: "https://" };
     if (type === "image") return { type: "image", src: "", alt: "" };
@@ -698,38 +1216,6 @@ function moveMemoBlock(btn, dir) {
     renderCell(); saveDraft();
 }
 
-function addListItem(btn) {
-    readFromDom();
-    const li = btn.closest("li"); const ul = li.parentNode;
-    const idx = Array.from(ul.children).indexOf(li);
-    const wrapper = btn.closest(".block-wrapper");
-    const bIdx = parseInt(wrapper.dataset.index);
-    const lesson = currentLesson();
-    let items;
-    if (lesson.type === "memo") items = lesson.cells[state.currentSlideIndex].content[bIdx].items;
-    else items = lesson.slides[state.currentSlideIndex].content[bIdx].items;
-    items.splice(idx + 1, 0, "Новый пункт");
-    if (lesson.type === "memo") renderCell();
-    else renderSlide();
-    saveDraft();
-}
-function removeListItem(btn) {
-    readFromDom();
-    const li = btn.closest("li"); const ul = li.parentNode;
-    const idx = Array.from(ul.children).indexOf(li);
-    const wrapper = btn.closest(".block-wrapper");
-    const bIdx = parseInt(wrapper.dataset.index);
-    const lesson = currentLesson();
-    let items;
-    if (lesson.type === "memo") items = lesson.cells[state.currentSlideIndex].content[bIdx].items;
-    else items = lesson.slides[state.currentSlideIndex].content[bIdx].items;
-    if (items.length <= 1) { alert("Нельзя удалить последний пункт."); return; }
-    items.splice(idx, 1);
-    if (lesson.type === "memo") renderCell();
-    else renderSlide();
-    saveDraft();
-}
-
 function addSlide() {
     readFromDom();
     const lesson = currentLesson();
@@ -741,9 +1227,17 @@ function addSlide() {
         }
         lesson.cells.push({
             title: "НОВАЯ ЯЧЕЙКА",
-            content: [{ type: "ul", items: ["Первый пункт", "Второй пункт"] }]
+            content: [{ type: "ul", style: "bullet", items: [{ text: "Первый пункт", level: 0 }, { text: "Второй пункт", level: 0 }] }]
         });
         state.currentSlideIndex = lesson.cells.length - 1;
+        refreshAll(); saveDraft();
+    } else if (lesson.type === "glossary") {
+        if (!lesson.terms) lesson.terms = [];
+        lesson.terms.push({
+            name: "Новый термин",
+            content: [{ type: "p", text: "Определение термина." }]
+        });
+        state.currentSlideIndex = lesson.terms.length - 1;
         refreshAll(); saveDraft();
     } else {
         lesson.slides.push({ shortName: "Новый слайд", title: "Новый слайд", content: [{ type: "p", text: "Текст нового слайда." }] });
@@ -759,6 +1253,14 @@ function deleteSlide() {
         if (!confirm("Удалить ячейку?")) return;
         cells.splice(state.currentSlideIndex, 1);
         if (state.currentSlideIndex >= cells.length) state.currentSlideIndex = cells.length - 1;
+        refreshAll(); saveDraft();
+    } else if (lesson.type === "glossary") {
+        const terms = lesson.terms || [];
+        if (terms.length <= 1) { alert("Нельзя удалить единственный термин."); return; }
+        const termName = String(terms[state.currentSlideIndex].name || "").trim() || "(без названия)";
+        if (!confirm("Удалить термин «" + termName + "»?")) return;
+        terms.splice(state.currentSlideIndex, 1);
+        if (state.currentSlideIndex >= terms.length) state.currentSlideIndex = terms.length - 1;
         refreshAll(); saveDraft();
     } else {
         const slides = lesson.slides;
@@ -1313,53 +1815,21 @@ function readFromDom() {
         const cell = lesson.cells[state.currentSlideIndex];
         if (!cell) return;
         cell.title = document.getElementById("cell-title-input").value;
-        cell.content = readBlocksFromContainer("memo-content");
+        // Уже не читаем content из DOM — он живёт в объекте. Но на всякий случай — только тексты без UL.
+        // UL не трогаем: он уже отредактировал объект через свои события.
+    } else if (lesson.type === "glossary") {
+        const term = lesson.terms[state.currentSlideIndex];
+        if (!term) return;
+        term.name = document.getElementById("term-name-input").value;
     } else {
         const slide = lesson.slides[state.currentSlideIndex];
         if (!slide) return;
         slide.shortName = document.getElementById("slide-shortname-input").value;
         slide.title = document.getElementById("slide-title-input").value;
-        slide.content = readBlocksFromContainer("preview-content");
     }
     courseSettings.courseTitle = document.getElementById("course-title-input").value;
     courseSettings.pageTitle = document.getElementById("page-title-input").value;
     saveDraft();
-}
-
-function readBlocksFromContainer(containerId) {
-    const container = document.getElementById(containerId);
-    if (!container) return [];
-    const wrappers = container.querySelectorAll(":scope > .block-wrapper");
-    const nc = [];
-    wrappers.forEach(w => {
-        const type = w.dataset.type;
-        if (type === "p" || type === "h3") nc.push({ type, text: sanitizeHtml(w.querySelector("p, h3").innerHTML) });
-        else if (type === "quote") nc.push({ type: "quote", text: sanitizeHtml(w.querySelector(".quote-text").innerHTML) });
-        else if (type === "ul") nc.push({ type: "ul", items: Array.from(w.querySelectorAll("li .li-text")).map(s => sanitizeHtml(s.innerHTML)) });
-        else if (type === "link") nc.push({ type: "link", text: sanitizeHtml(w.querySelector(".link-text").innerHTML), href: w.querySelector(".link-url").value });
-        else if (type === "image") {
-            const inp = w.querySelector(".media-src-input");
-            nc.push({ type: "image", src: inp ? inp.value.trim() : "", alt: "" });
-        }
-        else if (type === "video") {
-            const inp = w.querySelector(".media-src-input");
-            nc.push({ type: "video", src: inp ? inp.value.trim() : "" });
-        }
-        else if (type === "table") {
-            const grid = w.querySelector(".table-editor-grid");
-            const hasHeader = w.querySelector(".table-editor-toggle input[type='checkbox']").checked;
-            const rows = [];
-            if (grid) {
-                grid.querySelectorAll("tr").forEach(tr => {
-                    const row = [];
-                    tr.querySelectorAll("input").forEach(inp => row.push(inp.value));
-                    rows.push(row);
-                });
-            }
-            nc.push({ type: "table", header: hasHeader, rows });
-        }
-    });
-    return nc;
 }
 
 let changeTimer;
@@ -1379,6 +1849,7 @@ function onFieldChange() {
             readFromDom();
             renderLessonList();
             if (lesson.type === "memo") renderCellsList();
+            else if (lesson.type === "glossary") renderTermsList();
             else renderSlideList();
         }
         saveDraft();
@@ -1399,6 +1870,7 @@ function addLesson(type) {
     let baseKey;
     if (type === "quiz") baseKey = "new_quiz";
     else if (type === "memo") baseKey = "new_memo";
+    else if (type === "glossary") baseKey = "new_glossary";
     else baseKey = "new_lesson";
     let key = baseKey;
     let n = 1;
@@ -1425,7 +1897,19 @@ function addLesson(type) {
             title: "Новая памятка",
             cells: [{
                 title: "НОВАЯ ЯЧЕЙКА",
-                content: [{ type: "ul", items: ["Первый пункт", "Второй пункт"] }]
+                content: [{ type: "ul", style: "bullet", items: [
+                    { text: "Первый пункт", level: 0 },
+                    { text: "Второй пункт", level: 0 }
+                ] }]
+            }]
+        };
+    } else if (type === "glossary") {
+        allLessons[key] = {
+            type: "glossary",
+            title: "Новый глоссарий",
+            terms: [{
+                name: "Новый термин",
+                content: [{ type: "p", text: "Определение термина." }]
             }]
         };
     } else {
@@ -1490,7 +1974,7 @@ function importLesson() {
                     return;
                 }
                 const lesson = data.lesson;
-                if (lesson.type !== "theory" && lesson.type !== "quiz" && lesson.type !== "memo") {
+                if (lesson.type !== "theory" && lesson.type !== "quiz" && lesson.type !== "memo" && lesson.type !== "glossary") {
                     setStatus("Ошибка: неизвестный тип блока", "err");
                     return;
                 }
@@ -1498,7 +1982,7 @@ function importLesson() {
                 let originalKey = null;
                 const m = file.name.match(/^block_(.+)\.json$/i);
                 if (m && m[1]) originalKey = m[1];
-                const baseKey = originalKey || (lesson.type === "quiz" ? "new_quiz" : (lesson.type === "memo" ? "new_memo" : "new_lesson"));
+                const baseKey = originalKey || (lesson.type === "quiz" ? "new_quiz" : (lesson.type === "memo" ? "new_memo" : (lesson.type === "glossary" ? "new_glossary" : "new_lesson")));
                 let finalKey = baseKey;
                 let n = 1;
                 while (allLessons[finalKey]) {
@@ -1527,12 +2011,23 @@ function importLesson() {
                     }
                 } else if (lesson.type === "theory") {
                     if (!lesson.slides) lesson.slides = [];
-                    lesson.slides.forEach(slide => { if (!slide.content) slide.content = []; });
+                    lesson.slides.forEach(slide => {
+                        if (!slide.content) slide.content = [];
+                        migrateListBlocksInContent(slide.content);
+                    });
                 } else if (lesson.type === "memo") {
                     if (!lesson.cells) lesson.cells = [];
                     lesson.cells.forEach(cell => {
                         if (!cell.content) cell.content = [];
                         if (cell.title === undefined) cell.title = "";
+                        migrateListBlocksInContent(cell.content);
+                    });
+                } else if (lesson.type === "glossary") {
+                    if (!lesson.terms) lesson.terms = [];
+                    lesson.terms.forEach(term => {
+                        if (!term.content) term.content = [];
+                        if (term.name === undefined) term.name = "";
+                        migrateListBlocksInContent(term.content);
                     });
                 }
                 allLessons[finalKey] = lesson;
@@ -1592,6 +2087,19 @@ function importCourse() {
                         lesson.cells.forEach(cell => {
                             if (!cell.content) cell.content = [];
                             if (cell.title === undefined) cell.title = "";
+                            migrateListBlocksInContent(cell.content);
+                        });
+                    } else if (lesson.type === "glossary") {
+                        if (!lesson.terms) lesson.terms = [];
+                        lesson.terms.forEach(term => {
+                            if (!term.content) term.content = [];
+                            if (term.name === undefined) term.name = "";
+                            migrateListBlocksInContent(term.content);
+                        });
+                    } else if (lesson.type === "theory" && lesson.slides) {
+                        lesson.slides.forEach(slide => {
+                            if (!slide.content) slide.content = [];
+                            migrateListBlocksInContent(slide.content);
                         });
                     }
                 });
@@ -1629,13 +2137,17 @@ function openPreview() {
         pvState.lessonType = "quiz";
     } else if (lesson.type === "memo") {
         pvState.lessonType = "memo";
+    } else if (lesson.type === "glossary") {
+        pvState.lessonType = "glossary";
+        pvState.selectedTermIdx = state.currentSlideIndex || 0;
+        pvState.searchQuery = "";
     } else {
         pvState.lessonType = "theory";
     }
     document.getElementById("pv-overlay").classList.add("show");
     document.body.style.overflow = "hidden";
     const pvCard = document.getElementById("pv-card");
-    if (lesson.type === "memo") pvCard.classList.add("wide");
+    if (lesson.type === "memo" || lesson.type === "glossary") pvCard.classList.add("wide");
     else pvCard.classList.remove("wide");
     renderPreview();
 }
@@ -1672,6 +2184,7 @@ function renderPreview() {
     const body = document.getElementById("pv-body");
     if (lesson.type === "quiz") body.innerHTML = renderPreviewQuiz(lesson);
     else if (lesson.type === "memo") body.innerHTML = renderPreviewMemo(lesson);
+    else if (lesson.type === "glossary") body.innerHTML = renderPreviewGlossary(lesson);
     else {
         const slide = lesson.slides[state.currentSlideIndex];
         if (!slide) { body.innerHTML = "<p>Слайд не найден</p>"; return; }
@@ -1702,6 +2215,50 @@ function renderPreviewTable(b) {
     return html;
 }
 
+function renderPreviewList(b) {
+    const style = b.style || "bullet";
+    const items = b.items || [];
+    if (!items.length) return "";
+    let html = `<ul class="slide-list slide-list-${style}">`;
+    let numCounter = [0, 0, 0];
+    items.forEach((item, i) => {
+        const text = (typeof item === "string") ? item : (item.text || "");
+        const level = (typeof item === "object" && item.level !== undefined) ? item.level : 0;
+        if (style === "number") {
+            numCounter[level] = (numCounter[level] || 0) + 1;
+            for (let k = level + 1; k < numCounter.length; k++) numCounter[k] = 0;
+        }
+        let marker = "";
+        let markerHtml = "";
+        if (style === "bullet") {
+            marker = level === 0 ? "•" : (level === 1 ? "◦" : "▪");
+        } else if (style === "number") {
+            marker = numCounter[level] + ".";
+        } else if (style === "checkbox") {
+            markerHtml = `<span class="slide-list-check">☐</span>`;
+        }
+        const markerSpan = markerHtml || `<span class="slide-list-marker">${marker}</span>`;
+        html += `<li class="slide-list-item level-${level}">${markerSpan}<span class="slide-list-text">${text}</span></li>`;
+    });
+    html += `</ul>`;
+    return html;
+}
+
+function renderPreviewMemoBlocks(blocks) {
+    let html = "";
+    (blocks || []).forEach(b => {
+        if (b.type === "p") html += `<p>${b.text}</p>`;
+        else if (b.type === "h3") html += `<h3>${b.text}</h3>`;
+        else if (b.type === "ul") html += renderPreviewList(b);
+        else if (b.type === "quote") html += `<div class="quote">${b.text}</div>`;
+        else if (b.type === "link") html += `<div class="pv-link-block"><a class="pv-slide-link" href="javascript:void(0)">🔗 ${b.text || "Ссылка"}</a></div>`;
+        else if (b.type === "image" && b.src) html += `<div class="slide-media"><img src="${b.src}" alt=""></div>`;
+        else if (b.type === "video" && b.src) html += `<div class="slide-media"><video src="${b.src}" controls preload="metadata"></video></div>`;
+        else if (b.type === "table") html += renderPreviewTable(b);
+    });
+    return html;
+}
+
 function renderPreviewMemo(lesson) {
     const cells = lesson.cells || [];
     const count = cells.length;
@@ -1722,19 +2279,60 @@ function renderPreviewMemo(lesson) {
     return html;
 }
 
-function renderPreviewMemoBlocks(blocks) {
-    let html = "";
-    (blocks || []).forEach(b => {
-        if (b.type === "p") html += `<p>${b.text}</p>`;
-        else if (b.type === "h3") html += `<h3>${b.text}</h3>`;
-        else if (b.type === "ul") { html += `<ul>`; b.items.forEach(i => html += `<li>${i}</li>`); html += `</ul>`; }
-        else if (b.type === "quote") html += `<div class="quote">${b.text}</div>`;
-        else if (b.type === "link") html += `<div class="pv-link-block"><a class="pv-slide-link" href="javascript:void(0)">🔗 ${b.text || "Ссылка"}</a></div>`;
-        else if (b.type === "image" && b.src) html += `<div class="slide-media"><img src="${b.src}" alt=""></div>`;
-        else if (b.type === "video" && b.src) html += `<div class="slide-media"><video src="${b.src}" controls preload="metadata"></video></div>`;
-        else if (b.type === "table") html += renderPreviewTable(b);
+function renderPreviewGlossary(lesson) {
+    const terms = lesson.terms || [];
+    const sorted = getSortedTermsWithIndexes(lesson);
+    const selIdx = pvState.selectedTermIdx || 0;
+    const query = (pvState.searchQuery || "").toLowerCase();
+
+    let html = `<div class="pv-header"><div class="pv-lesson-title">${lesson.title}</div></div>`;
+    html += `<div style="display:flex;gap:24px;align-items:flex-start;">`;
+    html += `<div style="width:260px;flex-shrink:0;">`;
+
+    html += `<div style="margin-bottom:12px;">`;
+    html += `<input type="text" class="input" placeholder="🔍 Поиск..." value="${escapeHtml(pvState.searchQuery || "")}" oninput="pvGlossarySearch(this.value)" style="font-size:13px;padding:8px 12px;">`;
+    html += `</div>`;
+
+    html += `<div style="max-height:60vh;overflow-y:auto;">`;
+    let shown = 0;
+    sorted.forEach(item => {
+        const name = String(item.term.name || "").trim();
+        if (query && !name.toLowerCase().includes(query)) return;
+        shown++;
+        const isCurrent = item.origIndex === selIdx;
+        html += `<button class="pv-glossary-term${isCurrent ? ' current' : ''}" onclick="pvGlossarySelect(${item.origIndex})">${escapeHtml(name || "(без названия)")}</button>`;
     });
+    if (shown === 0 && query) {
+        html += `<div style="font-size:13px;color:var(--text-muted);font-style:italic;padding:8px 4px;">Ничего не найдено</div>`;
+    }
+    html += `</div>`;
+    html += `</div>`;
+
+    html += `<div style="flex:1;min-width:0;">`;
+    const currentTerm = terms[selIdx];
+    if (currentTerm) {
+        html += `<h2 class="pv-slide-title" style="margin-top:0;">${escapeHtml(currentTerm.name || "(без названия)")}</h2>`;
+        html += `<div class="pv-slide-content">`;
+        html += renderPreviewMemoBlocks(currentTerm.content);
+        html += `</div>`;
+    } else {
+        html += `<p style="color:var(--text-muted);">Термин не выбран.</p>`;
+    }
+    html += `</div>`;
+
+    html += `</div>`;
+    html += `<div class="pv-mini-hint">Это предпросмотр глоссария.</div>`;
     return html;
+}
+
+function pvGlossarySearch(value) {
+    pvState.searchQuery = value || "";
+    renderPreview();
+}
+
+function pvGlossarySelect(origIndex) {
+    pvState.selectedTermIdx = origIndex;
+    renderPreview();
 }
 
 function getMemoCols(count) {
@@ -1757,7 +2355,7 @@ function renderPreviewSlide(lesson, slide) {
     (slide.content || []).forEach(b => {
         if (b.type === "p") html += `<p>${b.text}</p>`;
         else if (b.type === "h3") html += `<h3>${b.text}</h3>`;
-        else if (b.type === "ul") { html += `<ul>`; b.items.forEach(i => html += `<li>${i}</li>`); html += `</ul>`; }
+        else if (b.type === "ul") html += renderPreviewList(b);
         else if (b.type === "quote") html += `<div class="quote">${b.text}</div>`;
         else if (b.type === "link") {
             const isInternal = (b.href || "").startsWith("#");
@@ -2042,7 +2640,7 @@ function buildDataJs() {
     readFromDom();
     const sJ = JSON.stringify(courseSettings, null, 4);
     const lJ = JSON.stringify(allLessons, null, 4);
-    return "// ============================================================\n// ДАННЫЕ КУРСА\n// Редактируется через admin.html.\n// courseKey — уникальный ключ курса, не менять!\n// Типы блоков: lesson.type = \"theory\" | \"quiz\" | \"memo\".\n// Тип вопроса: q.type = \"single\" | \"multi\" | \"match\" | \"card\".\n// single/multi: { text, options, correct: [массив], explain, group }\n// match:        { text, pairs: [{left, right}], explain?, group }\n// card:         { front, frontImage, back, backImage, group }\n// memo:         { title, cells: [{ title, content: [...] }] }\n// table:        { type: \"table\", header: bool, rows: [[...], [...]] }\n// randomizeQuestions / randomizeOptions — перемешивание.\n// Контент слайдов/ячеек: блоки p, h3, ul, quote, link, image, video, table.\n// ============================================================\n\n" +
+    return "// ============================================================\n// ДАННЫЕ КУРСА\n// Редактируется через admin.html.\n// courseKey — уникальный ключ курса, не менять!\n// Типы блоков: lesson.type = \"theory\" | \"quiz\" | \"memo\" | \"glossary\".\n// Тип вопроса: q.type = \"single\" | \"multi\" | \"match\" | \"card\".\n// single/multi: { text, options, correct: [массив], explain, group }\n// match:        { text, pairs: [{left, right}], explain?, group }\n// card:         { front, frontImage, back, backImage, group }\n// memo:         { title, cells: [{ title, content: [...] }] }\n// glossary:     { title, terms: [{ name, content: [...] }] }\n// table:        { type: \"table\", header: bool, rows: [[...], [...]] }\n// ul:           { type: \"ul\", style: \"bullet\"|\"number\"|\"checkbox\", items: [{text, level}] }\n// randomizeQuestions / randomizeOptions — перемешивание.\n// Контент слайдов/ячеек/терминов: блоки p, h3, ul, quote, link, image, video, table.\n// ============================================================\n\n" +
            "const courseSettings = " + sJ + ";\n\n" +
            "const allLessons = " + lJ + ";\n";
 }

@@ -35,6 +35,7 @@
                 </div>
                 <div class="btn-group">
                     <button class="btn btn-outline" onclick="addLesson('memo')">＋ Памятка</button>
+                    <button class="btn btn-outline" onclick="addLesson('glossary')">＋ Глоссарий</button>
                 </div>
                 <div class="btn-group">
                     <button class="btn btn-outline" onclick="importLesson()" title="Загрузить блок из файла .json">📥 Импорт блока</button>
@@ -54,6 +55,9 @@
         <div class="card" id="slides-card">
             <div class="card-section">
                 <div class="section-title" id="cells-section-title">Слайды блока</div>
+                <div id="term-search-wrap" style="display:none;">
+                    <input type="text" class="input" id="term-search" placeholder="🔍 Поиск термина..." oninput="renderTermsList()">
+                </div>
                 <div id="slide-list"></div>
                 <div class="btn-group">
                     <button class="btn btn-outline" id="add-slide-btn" onclick="addSlide()">＋ Слайд</button>
@@ -158,6 +162,38 @@
                     <button class="btn btn-outline" onclick="addMemoBlock('image')">＋ 🖼 Картинка</button>
                     <button class="btn btn-outline" onclick="addMemoBlock('video')">＋ 🎬 Видео</button>
                     <button class="btn btn-outline" onclick="addMemoBlock('table')">＋ 📊 Таблица</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="glossary-editor" style="display:none;">
+            <div class="form-card">
+                <div class="form-card-header">
+                    <div class="icon-badge">📖</div>
+                    <div class="form-card-title">Термин</div>
+                </div>
+                <div class="field">
+                    <label class="field-label">Название термина</label>
+                    <input class="input" type="text" id="term-name-input" oninput="onFieldChange()" placeholder="Например: LMS (Learning Management System)">
+                </div>
+            </div>
+
+            <div class="form-card">
+                <div class="form-card-header">
+                    <div class="icon-badge">✏</div>
+                    <div class="form-card-title">Содержимое термина</div>
+                </div>
+                <div class="field-hint" style="margin-bottom:16px;">Кликни по любому блоку ниже — и правь прямо здесь.</div>
+                <div id="term-content"></div>
+                <div class="btn-group" style="margin-top:16px;">
+                    <button class="btn btn-outline" onclick="addTermBlock('p')">＋ Абзац</button>
+                    <button class="btn btn-outline" onclick="addTermBlock('h3')">＋ Подзаголовок</button>
+                    <button class="btn btn-outline" onclick="addTermBlock('ul')">＋ Список</button>
+                    <button class="btn btn-outline" onclick="addTermBlock('quote')">＋ Выделение</button>
+                    <button class="btn btn-outline" onclick="addTermBlock('link')">＋ Ссылка</button>
+                    <button class="btn btn-outline" onclick="addTermBlock('image')">＋ 🖼 Картинка</button>
+                    <button class="btn btn-outline" onclick="addTermBlock('video')">＋ 🎬 Видео</button>
+                    <button class="btn btn-outline" onclick="addTermBlock('table')">＋ 📊 Таблица</button>
                 </div>
             </div>
         </div>
