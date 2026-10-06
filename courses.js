@@ -16,5 +16,5 @@
 const COURSES = [
     { folder: "Test", title: "Test" },
     { folder: "EN", title: "English language" },
-    { folder: "JavaScript", title: "JavaScript" },
+    { folder: "JavaSkript", title: "JavaSkript" }
 ];
