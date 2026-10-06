@@ -950,6 +950,46 @@ function getMaxCols(rows) {
     return m;
 }
 
+/* ===== RICH-ПАНЕЛЬ ДЛЯ P / H3 / QUOTE ===== */
+function createRichToolbar(editable) {
+    const bar = document.createElement("div");
+    bar.className = "rich-toolbar";
+    bar.contentEditable = "false";
+
+    const btn = (label, title, cmd, value) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "rich-btn";
+        b.textContent = label;
+        b.title = title;
+        b.onmousedown = (e) => {
+            e.preventDefault();
+            editable.focus();
+            document.execCommand(cmd, false, value || null);
+            onFieldChange();
+        };
+        return b;
+    };
+
+    const sep = () => {
+        const s = document.createElement("span");
+        s.className = "rich-sep";
+        return s;
+    };
+
+    bar.appendChild(btn("B", "Жирный (Ctrl+B)", "bold"));
+    bar.appendChild(btn("I", "Курсив (Ctrl+I)", "italic"));
+    bar.appendChild(btn("U", "Подчёркнутый (Ctrl+U)", "underline"));
+    bar.appendChild(btn("S", "Зачёркнутый", "strikeThrough"));
+    bar.appendChild(sep());
+    bar.appendChild(btn("⯇", "По левому краю", "justifyLeft"));
+    bar.appendChild(btn("≡", "По центру", "justifyCenter"));
+    bar.appendChild(btn("⯈", "По правому краю", "justifyRight"));
+    bar.appendChild(btn("☰", "По ширине", "justifyFull"));
+
+    return bar;
+}
+
 function createBlockElement(block, index, context) {
     const wrapper = document.createElement("div");
     wrapper.className = "block-wrapper";
@@ -990,14 +1030,21 @@ function createBlockElement(block, index, context) {
         editable = createTableBody(block);
     }
 
+    // Для p / h3 / quote — Enter даёт <br>, добавляем панель
+    if ((block.type === "p" || block.type === "h3" || block.type === "quote") && editable) {
+        editable.addEventListener("keydown", e => {
+            if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                document.execCommand("insertLineBreak");
+                onFieldChange();
+            }
+        });
+        editable.addEventListener("paste", handlePaste);
+        wrapper.appendChild(createRichToolbar(editable));
+    }
+
     if (editable) {
         wrapper.appendChild(editable);
-        if (block.type !== "ul" && block.type !== "link" && block.type !== "image" && block.type !== "video" && block.type !== "table") {
-            editable.addEventListener("keydown", e => {
-                if (e.key === "Enter" && !e.shiftKey) e.preventDefault();
-            });
-            editable.addEventListener("paste", handlePaste);
-        }
     }
 
     wrapper.addEventListener("input", onFieldChange);
@@ -1096,20 +1143,35 @@ function sanitizeHtml(html) {
     if (html == null) return "";
     let s = String(html);
 
+    // Удаляем опасные теги целиком
     s = s.replace(/<(script|style|iframe|object|embed|svg|math)[^>]*>[\s\S]*?<\/\1>/gi, "");
     s = s.replace(/<(script|style|iframe|object|embed|svg|math)[^>]*\/?>/gi, "");
-    s = s.replace(/<br\s*\/?>/gi, " ");
+
+    // Нормализуем переносы
+    s = s.replace(/<br\s*\/?>/gi, "<br>");
     s = s.replace(/&nbsp;/gi, " ");
 
-    const allowed = /^(strong|b|em|i|u)$/i;
-    s = s.replace(/<\/?([a-zA-Z][a-zA-Z0-9]*)\b[^>]*>/g, function(match, tagName) {
-        if (allowed.test(tagName)) {
-            const isClosing = match.charAt(1) === "/";
-            return isClosing ? "</" + tagName.toLowerCase() + ">" : "<" + tagName.toLowerCase() + ">";
+    // Разрешённые теги
+    const allowed = /^(strong|b|em|i|u|s|strike|del|br|span|div|p)$/i;
+    s = s.replace(/<\/?([a-zA-Z][a-zA-Z0-9]*)\b([^>]*)>/g, function(match, tagName, attrs) {
+        const tag = tagName.toLowerCase();
+        if (!allowed.test(tag)) return "";
+        const isClosing = match.charAt(1) === "/";
+        if (isClosing) return "</" + tag + ">";
+
+        // Разрешаем style только с text-align
+        let safeAttrs = "";
+        const styleMatch = attrs.match(/style\s*=\s*["']([^"']*)["']/i);
+        if (styleMatch) {
+            const alignMatch = styleMatch[1].match(/text-align\s*:\s*(left|center|right|justify)/i);
+            if (alignMatch) {
+                safeAttrs = ' style="text-align:' + alignMatch[1].toLowerCase() + '"';
+            }
         }
-        return "";
+        return "<" + tag + safeAttrs + ">";
     });
 
+    // Схлопываем пробелы
     s = s.replace(/[ \t]+/g, " ");
     s = s.trim();
     return s;
@@ -1131,7 +1193,7 @@ function handlePaste(e) {
             .replace(/&/g, "&amp;")
             .replace(/</g, "&lt;")
             .replace(/>/g, "&gt;")
-            .replace(/\r?\n+/g, " ")
+            .replace(/\r?\n+/g, "<br>")
             .replace(/\s+/g, " ")
             .trim();
     }
@@ -1800,6 +1862,27 @@ function removeOption(btn) {
     renderQuizEditor(lesson); saveDraft();
 }
 
+/* ============================================================
+   ЧТЕНИЕ contentEditable-БЛОКОВ В ОБЪЕКТ
+   ============================================================ */
+function readEditableBlocks(containerId, blocks) {
+    const container = document.getElementById(containerId);
+    if (!container || !Array.isArray(blocks)) return;
+    const wrappers = container.querySelectorAll(".block-wrapper");
+    wrappers.forEach((w) => {
+        const idx = parseInt(w.dataset.index);
+        const b = blocks[idx];
+        if (!b) return;
+        if (b.type === "p" || b.type === "h3") {
+            const el = w.querySelector("p, h3");
+            if (el) b.text = sanitizeHtml(el.innerHTML);
+        } else if (b.type === "quote") {
+            const el = w.querySelector(".quote-text");
+            if (el) b.text = sanitizeHtml(el.innerHTML);
+        }
+    });
+}
+
 function readFromDom() {
     const lesson = currentLesson();
     if (!lesson) return;
@@ -1815,17 +1898,18 @@ function readFromDom() {
         const cell = lesson.cells[state.currentSlideIndex];
         if (!cell) return;
         cell.title = document.getElementById("cell-title-input").value;
-        // Уже не читаем content из DOM — он живёт в объекте. Но на всякий случай — только тексты без UL.
-        // UL не трогаем: он уже отредактировал объект через свои события.
+        readEditableBlocks("memo-content", cell.content);
     } else if (lesson.type === "glossary") {
         const term = lesson.terms[state.currentSlideIndex];
         if (!term) return;
         term.name = document.getElementById("term-name-input").value;
+        readEditableBlocks("term-content", term.content);
     } else {
         const slide = lesson.slides[state.currentSlideIndex];
         if (!slide) return;
         slide.shortName = document.getElementById("slide-shortname-input").value;
         slide.title = document.getElementById("slide-title-input").value;
+        readEditableBlocks("preview-content", slide.content);
     }
     courseSettings.courseTitle = document.getElementById("course-title-input").value;
     courseSettings.pageTitle = document.getElementById("page-title-input").value;
@@ -2247,10 +2331,10 @@ function renderPreviewList(b) {
 function renderPreviewMemoBlocks(blocks) {
     let html = "";
     (blocks || []).forEach(b => {
-        if (b.type === "p") html += `<p>${b.text}</p>`;
-        else if (b.type === "h3") html += `<h3>${b.text}</h3>`;
+        if (b.type === "p") html += `<p>${b.text || ""}</p>`;
+        else if (b.type === "h3") html += `<h3>${b.text || ""}</h3>`;
         else if (b.type === "ul") html += renderPreviewList(b);
-        else if (b.type === "quote") html += `<div class="quote">${b.text}</div>`;
+        else if (b.type === "quote") html += `<div class="quote">${b.text || ""}</div>`;
         else if (b.type === "link") html += `<div class="pv-link-block"><a class="pv-slide-link" href="javascript:void(0)">🔗 ${b.text || "Ссылка"}</a></div>`;
         else if (b.type === "image" && b.src) html += `<div class="slide-media"><img src="${b.src}" alt=""></div>`;
         else if (b.type === "video" && b.src) html += `<div class="slide-media"><video src="${b.src}" controls preload="metadata"></video></div>`;
@@ -2353,10 +2437,10 @@ function renderPreviewSlide(lesson, slide) {
     html += `<h2 class="pv-slide-title">${slide.title || "(без заголовка)"}</h2>`;
     html += `<div class="pv-slide-content">`;
     (slide.content || []).forEach(b => {
-        if (b.type === "p") html += `<p>${b.text}</p>`;
-        else if (b.type === "h3") html += `<h3>${b.text}</h3>`;
+        if (b.type === "p") html += `<p>${b.text || ""}</p>`;
+        else if (b.type === "h3") html += `<h3>${b.text || ""}</h3>`;
         else if (b.type === "ul") html += renderPreviewList(b);
-        else if (b.type === "quote") html += `<div class="quote">${b.text}</div>`;
+        else if (b.type === "quote") html += `<div class="quote">${b.text || ""}</div>`;
         else if (b.type === "link") {
             const isInternal = (b.href || "").startsWith("#");
             html += `<div class="pv-link-block"><a class="pv-slide-link${isInternal ? ' internal' : ''}" href="javascript:void(0)">🔗 ${b.text || "Ссылка"}</a></div>`;
@@ -2640,7 +2724,7 @@ function buildDataJs() {
     readFromDom();
     const sJ = JSON.stringify(courseSettings, null, 4);
     const lJ = JSON.stringify(allLessons, null, 4);
-    return "// ============================================================\n// ДАННЫЕ КУРСА\n// Редактируется через admin.html.\n// courseKey — уникальный ключ курса, не менять!\n// Типы блоков: lesson.type = \"theory\" | \"quiz\" | \"memo\" | \"glossary\".\n// Тип вопроса: q.type = \"single\" | \"multi\" | \"match\" | \"card\".\n// single/multi: { text, options, correct: [массив], explain, group }\n// match:        { text, pairs: [{left, right}], explain?, group }\n// card:         { front, frontImage, back, backImage, group }\n// memo:         { title, cells: [{ title, content: [...] }] }\n// glossary:     { title, terms: [{ name, content: [...] }] }\n// table:        { type: \"table\", header: bool, rows: [[...], [...]] }\n// ul:           { type: \"ul\", style: \"bullet\"|\"number\"|\"checkbox\", items: [{text, level}] }\n// randomizeQuestions / randomizeOptions — перемешивание.\n// Контент слайдов/ячеек/терминов: блоки p, h3, ul, quote, link, image, video, table.\n// ============================================================\n\n" +
+    return "// ============================================================\n// ДАННЫЕ КУРСА\n// Редактируется через admin.html.\n// courseKey — уникальный ключ курса, не менять!\n// Типы блоков: lesson.type = \"theory\" | \"quiz\" | \"memo\" | \"glossary\".\n// Тип вопроса: q.type = \"single\" | \"multi\" | \"match\" | \"card\".\n// single/multi: { text, options, correct: [массив], explain, group }\n// match:        { text, pairs: [{left, right}], explain?, group }\n// card:         { front, frontImage, back, backImage, group }\n// memo:         { title, cells: [{ title, content: [...] }] }\n// glossary:     { title, terms: [{ name, content: [...] }] }\n// table:        { type: \"table\", header: bool, rows: [[...], [...]] }\n// ul:           { type: \"ul\", style: \"bullet\"|\"number\"|\"checkbox\", items: [{text, level}] }\n// randomizeQuestions / randomizeOptions — перемешивание.\n// Контент слайдов/ячеек/терминов: блоки p, h3, ul, quote, link, image, video, table.\n// В p/h3/quote допустимы <b>, <i>, <u>, <s> и style=\"text-align:...\".\n// ============================================================\n\n" +
            "const courseSettings = " + sJ + ";\n\n" +
            "const allLessons = " + lJ + ";\n";
 }

@@ -401,6 +401,55 @@ textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
 }
 .block-wrapper ul li:hover .li-tools { display: flex; }
 
+/* ===== Rich-панель для p / h3 / quote ===== */
+.rich-toolbar {
+    display: flex;
+    gap: 2px;
+    align-items: center;
+    margin-bottom: 6px;
+    padding: 4px 6px;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    opacity: 0.35;
+    transition: opacity .15s;
+}
+.block-wrapper:hover .rich-toolbar,
+.block-wrapper:focus-within .rich-toolbar {
+    opacity: 1;
+}
+.rich-btn {
+    min-width: 28px;
+    height: 28px;
+    padding: 0 8px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all .15s;
+}
+.rich-btn:hover {
+    background: var(--hover-strong);
+    color: var(--text);
+}
+.rich-sep {
+    width: 1px;
+    height: 18px;
+    background: var(--border);
+    margin: 0 4px;
+}
+
+/* Само поле — сохраняем выравнивание при редактировании */
+.block-wrapper p,
+.block-wrapper h3,
+.block-wrapper .quote-text {
+    min-height: 1.4em;
+}
+
 .link-editor {
     padding: 14px 18px; background: var(--secondary-soft);
     border-radius: var(--radius-md);

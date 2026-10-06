@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Редактор курса</title>
+    <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+
+<div class="topbar">
+    <div class="left">
+        <div class="logo">✎</div>
+        <div class="title">Редактор курса</div>
+    </div>
+    <div class="right">
+        <button class="btn btn-outline" onclick="openPreview()" title="Предпросмотр">👁 Предпросмотр</button>
+        <button class="btn btn-outline" onclick="downloadData()" title="Скачать data.js">📤 Скачать</button>
+        <button class="btn btn-outline" onclick="reloadFromFile()" title="Откатить к data.js">↻ Откатить</button>
+        <button class="btn btn-primary" onclick="saveToFile()">💾 Сохранить</button>
+        <button class="btn-icon" onclick="toggleTheme()" id="theme-toggle" title="Сменить тему">🌙</button>
+    </div>
+</div>
+
+<div class="status" id="status"></div>
+
+<div class="layout">
+    <aside class="sidebar">
+        <div class="card">
+            <div class="card-section">
+                <div class="section-title">Блоки курса</div>
+                <div id="lesson-list"></div>
+                <div class="btn-group">
+                    <button class="btn btn-outline" onclick="addLesson('theory')">＋ Теория</button>
+                    <button class="btn btn-outline" onclick="addLesson('quiz')">＋ Тест</button>
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-outline" onclick="addLesson('memo')">＋ Памятка</button>
+                    <button class="btn btn-outline" onclick="addLesson('glossary')">＋ Глоссарий</button>
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-outline" onclick="importLesson()" title="Загрузить блок из файла .json">📥 Импорт блока</button>
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-outline" onclick="exportCourse()" title="Скачать весь курс в файл .json">📤 Экспорт курса</button>
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-outline" onclick="importCourse()" title="Заменить весь курс из файла .json">📥 Импорт всего курса</button>
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-danger" onclick="deleteLesson()">✕ Удалить блок</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="card" id="slides-card">
+            <div class="card-section">
+                <div class="section-title" id="cells-section-title">Слайды блока</div>
+                <div id="term-search-wrap" style="display:none;">
+                    <input type="text" class="input" id="term-search" placeholder="🔍 Поиск термина..." oninput="renderTermsList()">
+                </div>
+                <div id="slide-list"></div>
+                <div class="btn-group">
+                    <button class="btn btn-outline" id="add-slide-btn" onclick="addSlide()">＋ Слайд</button>
+                    <button class="btn btn-danger" onclick="deleteSlide()">✕ Удалить</button>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <main class="main">
+        <div class="form-card">
+            <div class="form-card-header">
+                <div class="icon-badge">⚙</div>
+                <div class="form-card-title">Настройки курса</div>
+            </div>
+            <div class="field">
+                <label class="field-label">Название курса</label>
+                <input class="input" type="text" id="course-title-input" oninput="onCourseSettingsChange()">
+            </div>
+            <div class="field">
+                <label class="field-label">Заголовок вкладки браузера</label>
+                <input class="input" type="text" id="page-title-input" oninput="onCourseSettingsChange()">
+            </div>
+        </div>
+
+        <div class="form-card">
+            <div class="form-card-header">
+                <div class="icon-badge">📚</div>
+                <div class="form-card-title">Текущий блок</div>
+            </div>
+            <div class="field">
+                <label class="field-label">Название блока (в меню курса)</label>
+                <input class="input" type="text" id="lesson-title-input" oninput="onFieldChange()">
+            </div>
+            <div class="field">
+                <label class="field-label">Тип блока</label>
+                <input class="input" type="text" id="lesson-type-display" disabled>
+            </div>
+        </div>
+
+        <div id="theory-editor" style="display:none;">
+            <div class="form-card">
+                <div class="form-card-header">
+                    <div class="icon-badge">📄</div>
+                    <div class="form-card-title">Слайд</div>
+                </div>
+                <div class="field">
+                    <label class="field-label">Короткое имя слайда (в сайдбаре)</label>
+                    <input class="input" type="text" id="slide-shortname-input" oninput="onFieldChange()">
+                </div>
+                <div class="field">
+                    <label class="field-label">Заголовок слайда</label>
+                    <input class="input" type="text" id="slide-title-input" oninput="onFieldChange()">
+                </div>
+            </div>
+
+            <div class="form-card">
+                <div class="form-card-header">
+                    <div class="icon-badge">✏</div>
+                    <div class="form-card-title">Содержимое слайда</div>
+                </div>
+                <div class="field-hint" style="margin-bottom:16px;">Кликни по любому блоку ниже — и правь прямо здесь.</div>
+                <div id="preview-content"></div>
+                <div class="btn-group" style="margin-top:16px;">
+                    <button class="btn btn-outline" onclick="addBlock('p')">＋ Абзац</button>
+                    <button class="btn btn-outline" onclick="addBlock('h3')">＋ Подзаголовок</button>
+                    <button class="btn btn-outline" onclick="addBlock('ul')">＋ Список</button>
+                    <button class="btn btn-outline" onclick="addBlock('quote')">＋ Выделение</button>
+                    <button class="btn btn-outline" onclick="addBlock('link')">＋ Ссылка</button>
+                    <button class="btn btn-outline" onclick="addBlock('image')">＋ 🖼 Картинка</button>
+                    <button class="btn btn-outline" onclick="addBlock('video')">＋ 🎬 Видео</button>
+                    <button class="btn btn-outline" onclick="addBlock('table')">＋ 📊 Таблица</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="memo-editor" style="display:none;">
+            <div class="form-card">
+                <div class="form-card-header">
+                    <div class="icon-badge">📌</div>
+                    <div class="form-card-title">Ячейка памятки</div>
+                </div>
+                <div class="field">
+                    <label class="field-label">Заголовок ячейки (акцентный)</label>
+                    <input class="input" type="text" id="cell-title-input" oninput="onFieldChange()" placeholder="Например: ЗАКОНОДАТЕЛЬСТВО">
+                </div>
+            </div>
+
+            <div class="form-card">
+                <div class="form-card-header">
+                    <div class="icon-badge">✏</div>
+                    <div class="form-card-title">Содержимое ячейки</div>
+                </div>
+                <div class="field-hint" style="margin-bottom:16px;">Кликни по любому блоку ниже — и правь прямо здесь.</div>
+                <div id="memo-content"></div>
+                <div class="btn-group" style="margin-top:16px;">
+                    <button class="btn btn-outline" onclick="addMemoBlock('p')">＋ Абзац</button>
+                    <button class="btn btn-outline" onclick="addMemoBlock('h3')">＋ Подзаголовок</button>
+                    <button class="btn btn-outline" onclick="addMemoBlock('ul')">＋ Список</button>
+                    <button class="btn btn-outline" onclick="addMemoBlock('quote')">＋ Выделение</button>
+                    <button class="btn btn-outline" onclick="addMemoBlock('link')">＋ Ссылка</button>
+                    <button class="btn btn-outline" onclick="addMemoBlock('image')">＋ 🖼 Картинка</button>
+                    <button class="btn btn-outline" onclick="addMemoBlock('video')">＋ 🎬 Видео</button>
+                    <button class="btn btn-outline" onclick="addMemoBlock('table')">＋ 📊 Таблица</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="glossary-editor" style="display:none;">
+            <div class="form-card">
+                <div class="form-card-header">
+                    <div class="icon-badge">📖</div>
+                    <div class="form-card-title">Термин</div>
+                </div>
+                <div class="field">
+                    <label class="field-label">Название термина</label>
+                    <input class="input" type="text" id="term-name-input" oninput="onFieldChange()" placeholder="Например: LMS (Learning Management System)">
+                </div>
+            </div>
+
+            <div class="form-card">
+                <div class="form-card-header">
+                    <div class="icon-badge">✏</div>
+                    <div class="form-card-title">Содержимое термина</div>
+                </div>
+                <div class="field-hint" style="margin-bottom:16px;">Кликни по любому блоку ниже — и правь прямо здесь.</div>
+                <div id="term-content"></div>
+                <div class="btn-group" style="margin-top:16px;">
+                    <button class="btn btn-outline" onclick="addTermBlock('p')">＋ Абзац</button>
+                    <button class="btn btn-outline" onclick="addTermBlock('h3')">＋ Подзаголовок</button>
+                    <button class="btn btn-outline" onclick="addTermBlock('ul')">＋ Список</button>
+                    <button class="btn btn-outline" onclick="addTermBlock('quote')">＋ Выделение</button>
+                    <button class="btn btn-outline" onclick="addTermBlock('link')">＋ Ссылка</button>
+                    <button class="btn btn-outline" onclick="addTermBlock('image')">＋ 🖼 Картинка</button>
+                    <button class="btn btn-outline" onclick="addTermBlock('video')">＋ 🎬 Видео</button>
+                    <button class="btn btn-outline" onclick="addTermBlock('table')">＋ 📊 Таблица</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="quiz-editor" style="display:none;">
+            <div class="form-card">
+                <div class="form-card-header">
+                    <div class="icon-badge">🎲</div>
+                    <div class="form-card-title">Настройки порядка</div>
+                </div>
+                <div class="field-hint" style="margin-bottom:16px;">
+                    Включи, если хочешь, чтобы порядок был случайным при каждом запуске теста.
+                    Прогресс и статистика сохраняются корректно.
+                </div>
+                <label class="q-toggle">
+                    <input type="checkbox" id="randomize-questions" onchange="onFieldChange()">
+                    <span>Перемешивать вопросы</span>
+                </label>
+                <label class="q-toggle">
+                    <input type="checkbox" id="randomize-options" onchange="onFieldChange()">
+                    <span>Перемешивать варианты ответов (для вопросов с выбором)</span>
+                </label>
+            </div>
+
+            <div class="form-card">
+                <div class="form-card-header">
+                    <div class="icon-badge">📂</div>
+                    <div class="form-card-title">Группы вопросов</div>
+                </div>
+                <div class="field-hint" style="margin-bottom:16px;">Группы нужны для статистики после прохождения.</div>
+                <div id="groups-list"></div>
+                <div class="groups-empty" id="groups-empty" style="display:none;">Пока ни одной группы.</div>
+                <div class="btn-group" style="margin-top:12px;">
+                    <button class="btn btn-outline" onclick="addGroup()">＋ Добавить группу</button>
+                </div>
+            </div>
+
+            <div class="form-card">
+                <div class="form-card-header">
+                    <div class="icon-badge">📝</div>
+                    <div class="form-card-title" id="quiz-summary">Тест: 0 вопросов</div>
+                </div>
+                <div class="field-hint" style="margin-bottom:20px;">
+                    Выбери тип вопроса сверху. Для «Один ответ» / «Несколько» — отметь галочками правильные.<br>
+                    Для «Соответствие» — заполни пары. Для «Карточка» — переднюю и заднюю сторону.
+                </div>
+                <div id="quiz-questions"></div>
+                <div class="quiz-add-row">
+                    <button class="btn btn-primary" onclick="addQuestion()">＋ Добавить вопрос</button>
+                </div>
+                <div class="csv-actions-row">
+                    <button class="btn btn-outline" onclick="openCsvImport()">📥 Импорт из CSV</button>
+                    <button class="btn btn-outline" onclick="openCsvTemplates()">📄 Скачать шаблоны CSV</button>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<div class="pv-overlay" id="pv-overlay" onclick="closePreviewIfOutside(event)">
+    <div class="pv-card" id="pv-card">
+        <button class="pv-close" onclick="closePreview()" title="Закрыть (Esc)">✕</button>
+        <div class="pv-card-inner" id="pv-body"></div>
+    </div>
+</div>
+
+<div class="csv-overlay" id="csv-overlay" onclick="closeCsvIfOutside(event)">
+    <div class="csv-modal" id="csv-modal">
+        <button class="csv-close" onclick="closeCsvModal()" title="Закрыть (Esc)">✕</button>
+        <div id="csv-modal-body"></div>
+    </div>
+</div>
+
+<script src="data.js"></script>
+<script src="admin.js"></script>
+</body>
+</html>
