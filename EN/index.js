@@ -221,8 +221,9 @@ if (typeof courseSettings !== "undefined") {
 function showScreen(name) {
     document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
     document.getElementById("screen-" + name).classList.add("active");
+    appContainer.classList.remove("wide", "narrow");
     if (name === "memo") appContainer.classList.add("wide");
-    else appContainer.classList.remove("wide");
+    else if (name === "quiz") appContainer.classList.add("narrow");
     updateBackButton();
 }
 

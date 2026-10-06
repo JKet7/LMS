@@ -401,6 +401,7 @@ textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
 }
 .block-wrapper ul li:hover .li-tools { display: flex; }
 
+<<<<<<< HEAD
 /* ===== Rich-панель для p / h3 / quote ===== */
 .rich-toolbar {
     display: flex;
@@ -450,6 +451,8 @@ textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
     min-height: 1.4em;
 }
 
+=======
+>>>>>>> 346949b7bb479c9521f818b04e0d87338a58181e
 .link-editor {
     padding: 14px 18px; background: var(--secondary-soft);
     border-radius: var(--radius-md);
@@ -597,7 +600,16 @@ textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
 .table-editor-actions .btn:disabled {
     opacity: .4; cursor: default;
 }
-
+/* ===== Выделение ячеек таблицы ===== */
+.table-editor-cell {
+    user-select: none;
+}
+.table-editor-cell.is-selected {
+    background: var(--primary-soft);
+}
+.table-editor-cell.is-selected input {
+    background: transparent;
+}
 /* ===== Галочки ===== */
 .q-toggle {
     display: flex; align-items: center; gap: 12px;

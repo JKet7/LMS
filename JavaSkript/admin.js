@@ -556,7 +556,6 @@ function createListEditor(block) {
 
     if (!block.style) block.style = "bullet";
     if (!Array.isArray(block.items)) block.items = [];
-    // Мигрируем на всякий случай
     block.items = block.items.map(item => {
         if (typeof item === "string") return { text: item, level: 0 };
         if (item && typeof item === "object") {
@@ -567,7 +566,6 @@ function createListEditor(block) {
         return { text: String(item || ""), level: 0 };
     });
 
-    // Шапка: селект стиля
     const header = document.createElement("div");
     header.className = "list-editor-header";
 
@@ -597,12 +595,10 @@ function createListEditor(block) {
 
     wrap.appendChild(header);
 
-    // Контейнер пунктов
     const itemsBox = document.createElement("div");
     itemsBox.className = "list-editor-items";
     wrap.appendChild(itemsBox);
 
-    // Кнопка «＋ пункт» снизу
     const addWrap = document.createElement("div");
     addWrap.style.marginTop = "8px";
     const addBtn = document.createElement("button");
@@ -619,7 +615,6 @@ function createListEditor(block) {
     addWrap.appendChild(addBtn);
     wrap.appendChild(addWrap);
 
-    // Функция отрисовки пунктов
     function renderItems() {
         itemsBox.innerHTML = "";
         if (block.items.length === 0) {
@@ -640,7 +635,6 @@ function createListEditor(block) {
         row.dataset.level = item.level;
         row.dataset.idx = idx;
 
-        // Маркер
         const marker = document.createElement("span");
         marker.className = "list-editor-marker";
         if (block.style === "bullet") {
@@ -654,7 +648,6 @@ function createListEditor(block) {
         }
         row.appendChild(marker);
 
-        // Поле текста
         const inp = document.createElement("input");
         inp.type = "text";
         inp.className = "list-editor-input";
@@ -667,10 +660,8 @@ function createListEditor(block) {
         inp.addEventListener("keydown", (e) => {
             if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
-                // Новый пункт того же уровня ниже
                 block.items.splice(idx + 1, 0, { text: "", level: item.level });
                 renderItems();
-                // Фокус на новый инпут
                 setTimeout(() => {
                     const newRow = itemsBox.querySelectorAll(".list-editor-row")[idx + 1];
                     if (newRow) {
@@ -684,7 +675,6 @@ function createListEditor(block) {
                 if (item.level < MAX_LIST_LEVEL) {
                     item.level++;
                     renderItems();
-                    // Восстанавливаем фокус на тот же пункт
                     setTimeout(() => {
                         const sameRow = itemsBox.querySelectorAll(".list-editor-row")[idx];
                         if (sameRow) {
@@ -710,17 +700,12 @@ function createListEditor(block) {
                 }
             }
         });
-        // Копипаст многострочного текста → каждый перенос = новый пункт
         inp.addEventListener("paste", (e) => {
             const text = (e.clipboardData || window.clipboardData).getData("text/plain") || "";
             if (!text) return;
             const lines = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
-            if (lines.length <= 1) {
-                // обычная вставка одного значения
-                return;
-            }
+            if (lines.length <= 1) return;
             e.preventDefault();
-            // Заменяем строку: первый в текущий пункт, остальные добавляем ниже
             const first = lines[0];
             const rest = lines.slice(1);
             item.text = first;
@@ -739,7 +724,6 @@ function createListEditor(block) {
         });
         row.appendChild(inp);
 
-        // Кнопки
         const tools = document.createElement("div");
         tools.className = "list-editor-tools";
 
@@ -812,6 +796,88 @@ function createListEditor(block) {
     return wrap;
 }
 
+/* ===== УТИЛИТЫ ДЛЯ ТАБЛИЦ ===== */
+function parseHtmlTable(html) {
+    if (!html) return null;
+    try {
+        const doc = new DOMParser().parseFromString(html, "text/html");
+        const table = doc.querySelector("table");
+        if (!table) return null;
+
+        const rows = [];
+        let hasHeader = false;
+
+        const trs = table.querySelectorAll("tr");
+        trs.forEach((tr, ri) => {
+            const cells = tr.querySelectorAll("th, td");
+            if (cells.length === 0) return;
+            const row = [];
+            cells.forEach(cell => {
+                let text = cell.textContent || "";
+                text = text.replace(/\s+/g, " ").trim();
+                row.push(text);
+            });
+            if (ri === 0 && tr.querySelector("th")) hasHeader = true;
+            rows.push(row);
+        });
+
+        if (rows.length === 0) return null;
+        return { rows, hasHeader };
+    } catch (e) {
+        return null;
+    }
+}
+
+function parseTsvText(text) {
+    if (!text) return null;
+    const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+    while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+    if (lines.length === 0) return null;
+
+    const rows = lines.map(line => line.split("\t").map(c => c.trim()));
+    const hasAnyTab = lines.some(l => l.includes("\t"));
+    if (!hasAnyTab && rows.length === 1 && rows[0].length === 1) return null;
+    return { rows, hasHeader: false };
+}
+
+function parseClipboardTable(clipboardData) {
+    if (!clipboardData) return null;
+    const html = clipboardData.getData("text/html") || "";
+    const text = clipboardData.getData("text/plain") || "";
+
+    const fromHtml = parseHtmlTable(html);
+    if (fromHtml && fromHtml.rows.length > 1) return fromHtml;
+
+    const fromText = parseTsvText(text);
+    if (fromText) return fromText;
+
+    if (fromHtml) return fromHtml;
+    return null;
+}
+
+function serializeToHtmlTable(rows, hasHeader) {
+    let html = "<table>";
+    rows.forEach((row, ri) => {
+        html += "<tr>";
+        row.forEach(cell => {
+            const tag = (hasHeader && ri === 0) ? "th" : "td";
+            const safe = String(cell == null ? "" : cell)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;");
+            html += `<${tag}>${safe}</${tag}>`;
+        });
+        html += "</tr>";
+    });
+    html += "</table>";
+    return html;
+}
+
+function serializeToTsv(rows) {
+    return rows.map(row => row.map(c => String(c == null ? "" : c)).join("\t")).join("\n");
+}
+
+/* ===== РЕДАКТОР ТАБЛИЦЫ ===== */
 function createTableBody(block) {
     const wrap = document.createElement("div");
     wrap.className = "table-editor";
@@ -819,6 +885,10 @@ function createTableBody(block) {
     if (!block.rows) block.rows = [["", ""], ["", ""]];
     if (block.header === undefined) block.header = true;
 
+    let selection = null;
+    let isDragging = false;
+
+    // ===== Верхняя панель =====
     const top = document.createElement("div");
     top.className = "table-editor-top";
 
@@ -844,13 +914,7 @@ function createTableBody(block) {
 
     wrap.appendChild(top);
 
-    const gridWrap = document.createElement("div");
-    gridWrap.className = "table-editor-grid-wrap";
-    const gridTable = document.createElement("table");
-    gridTable.className = "table-editor-grid";
-    gridWrap.appendChild(gridTable);
-    wrap.appendChild(gridWrap);
-
+    // ===== Кнопки =====
     const actions = document.createElement("div");
     actions.className = "table-editor-actions";
 
@@ -905,7 +969,56 @@ function createTableBody(block) {
     };
     actions.appendChild(removeColBtn);
 
+    const pasteBtn = document.createElement("button");
+    pasteBtn.type = "button";
+    pasteBtn.className = "btn btn-outline";
+    pasteBtn.textContent = "📥 Вставить из буфера";
+    pasteBtn.title = "Вставить таблицу из буфера (или нажми Ctrl+V в ячейке)";
+    pasteBtn.onclick = async () => {
+        try {
+            if (!navigator.clipboard || !navigator.clipboard.read) {
+                alert("Браузер не поддерживает чтение буфера. Используй Ctrl+V в ячейке.");
+                return;
+            }
+            const items = await navigator.clipboard.read();
+            let html = "", text = "";
+            for (const item of items) {
+                if (item.types.includes("text/html")) {
+                    const blob = await item.getType("text/html");
+                    html = await blob.text();
+                }
+                if (item.types.includes("text/plain")) {
+                    const blob = await item.getType("text/plain");
+                    text = await blob.text();
+                }
+            }
+            const fake = {
+                getData: (type) => type === "text/html" ? html : (type === "text/plain" ? text : "")
+            };
+            handlePasteIntoTable(fake);
+        } catch (e) {
+            alert("Не удалось прочитать буфер. Разреши доступ или используй Ctrl+V в ячейке.");
+        }
+    };
+    actions.appendChild(pasteBtn);
+
+    const copyBtn = document.createElement("button");
+    copyBtn.type = "button";
+    copyBtn.className = "btn btn-outline";
+    copyBtn.textContent = "📤 Скопировать выделенное";
+    copyBtn.title = "Скопировать выделенный диапазон как таблицу";
+    copyBtn.onclick = () => { copySelectionToClipboard(); };
+    actions.appendChild(copyBtn);
+
     wrap.appendChild(actions);
+
+    // ===== Сетка =====
+    const gridWrap = document.createElement("div");
+    gridWrap.className = "table-editor-grid-wrap";
+    const gridTable = document.createElement("table");
+    gridTable.className = "table-editor-grid";
+    gridWrap.appendChild(gridTable);
+    wrap.appendChild(gridWrap);
 
     function renderTableGrid() {
         const rows = block.rows || [];
@@ -917,16 +1030,52 @@ function createTableBody(block) {
             const tr = document.createElement("tr");
             for (let ci = 0; ci < cols; ci++) {
                 const td = document.createElement("td");
+                td.className = "table-editor-cell";
+                td.dataset.row = ri;
+                td.dataset.col = ci;
                 if (hasHeader && ri === 0) td.classList.add("is-header");
+
                 const inp = document.createElement("input");
                 inp.type = "text";
                 inp.value = (row[ci] !== undefined) ? row[ci] : "";
                 inp.placeholder = (hasHeader && ri === 0) ? ("Заголовок " + (ci + 1)) : "";
+                inp.dataset.row = ri;
+                inp.dataset.col = ci;
+
                 inp.addEventListener("input", () => {
                     while (row.length <= ci) row.push("");
                     row[ci] = inp.value;
                     onFieldChange();
                 });
+
+                inp.addEventListener("focus", () => {
+                    if (!selection || selection.anchor.r !== ri || selection.anchor.c !== ci
+                        || selection.focus.r !== ri || selection.focus.c !== ci) {
+                        selection = { anchor: { r: ri, c: ci }, focus: { r: ri, c: ci } };
+                        updateSelectionHighlight();
+                    }
+                });
+
+                td.addEventListener("mousedown", (e) => {
+                    if (e.button !== 0) return;
+                    e.preventDefault();
+                    inp.focus();
+
+                    if (e.shiftKey && selection) {
+                        selection.focus = { r: ri, c: ci };
+                    } else {
+                        selection = { anchor: { r: ri, c: ci }, focus: { r: ri, c: ci } };
+                    }
+                    isDragging = true;
+                    updateSelectionHighlight();
+                });
+
+                td.addEventListener("mouseover", () => {
+                    if (!isDragging || !selection) return;
+                    selection.focus = { r: ri, c: ci };
+                    updateSelectionHighlight();
+                });
+
                 td.appendChild(inp);
                 tr.appendChild(td);
             }
@@ -938,7 +1087,246 @@ function createTableBody(block) {
         addColBtn.disabled = cols >= MAX_TABLE_COLS;
         removeRowBtn.disabled = rows.length <= 1;
         removeColBtn.disabled = cols <= 1;
+
+        updateSelectionHighlight();
     }
+
+    function updateSelectionHighlight() {
+        const cells = gridTable.querySelectorAll(".table-editor-cell");
+        cells.forEach(td => td.classList.remove("is-selected"));
+        if (!selection) return;
+        const rect = getSelectionRect();
+        if (!rect) return;
+        cells.forEach(td => {
+            const r = parseInt(td.dataset.row);
+            const c = parseInt(td.dataset.col);
+            if (r >= rect.r1 && r <= rect.r2 && c >= rect.c1 && c <= rect.c2) {
+                td.classList.add("is-selected");
+            }
+        });
+    }
+
+    function getSelectionRect() {
+        if (!selection) return null;
+        const r1 = Math.min(selection.anchor.r, selection.focus.r);
+        const r2 = Math.max(selection.anchor.r, selection.focus.r);
+        const c1 = Math.min(selection.anchor.c, selection.focus.c);
+        const c2 = Math.max(selection.anchor.c, selection.focus.c);
+        return { r1, r2, c1, c2 };
+    }
+
+    function copySelectionToClipboard() {
+        const rect = getSelectionRect();
+        const rows = block.rows || [];
+        const cols = getMaxCols(rows) || 1;
+
+        const copyRect = rect || { r1: 0, r2: rows.length - 1, c1: 0, c2: cols - 1 };
+
+        const out = [];
+        for (let r = copyRect.r1; r <= copyRect.r2; r++) {
+            const row = [];
+            for (let c = copyRect.c1; c <= copyRect.c2; c++) {
+                row.push((rows[r] && rows[r][c] !== undefined) ? String(rows[r][c]) : "");
+            }
+            out.push(row);
+        }
+
+        const html = serializeToHtmlTable(out, block.header && copyRect.r1 === 0);
+        const tsv = serializeToTsv(out);
+
+        if (navigator.clipboard && navigator.clipboard.write) {
+            const htmlBlob = new Blob([html], { type: "text/html" });
+            const textBlob = new Blob([tsv], { type: "text/plain" });
+            navigator.clipboard.write([
+                new ClipboardItem({
+                    "text/html": htmlBlob,
+                    "text/plain": textBlob
+                })
+            ]).then(() => {
+                setStatus("📤 Скопировано: " + out.length + "×" + (out[0] ? out[0].length : 0), "ok");
+            }).catch(() => {
+                fallbackCopy(tsv);
+            });
+        } else {
+            fallbackCopy(tsv);
+        }
+    }
+
+    function fallbackCopy(text) {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand("copy"); setStatus("📤 Скопировано", "ok"); }
+        catch (e) { setStatus("⚠ Не удалось скопировать", "err"); }
+        document.body.removeChild(ta);
+    }
+
+    function handlePasteIntoTable(clipboardData) {
+        const parsed = parseClipboardTable(clipboardData);
+        if (!parsed) {
+            setStatus("⚠ В буфере нет таблицы", "err");
+            return;
+        }
+        const { rows: pastedRows, hasHeader } = parsed;
+        if (pastedRows.length === 0) return;
+
+        const cols = getMaxCols(block.rows) || 1;
+
+        let target;
+        if (selection) {
+            const rect = getSelectionRect();
+            const isSingleCell = (rect.r1 === rect.r2 && rect.c1 === rect.c2);
+            if (isSingleCell) {
+                target = {
+                    r1: rect.r1,
+                    c1: rect.c1,
+                    r2: rect.r1 + pastedRows.length - 1,
+                    c2: rect.c1 + (pastedRows[0] ? pastedRows[0].length : 1) - 1
+                };
+            } else {
+                target = rect;
+            }
+        } else {
+            target = {
+                r1: 0, c1: 0,
+                r2: pastedRows.length - 1,
+                c2: (pastedRows[0] ? pastedRows[0].length : 1) - 1
+            };
+        }
+
+        const maxR = Math.min(target.r2, MAX_TABLE_ROWS - 1);
+        const maxC = Math.min(target.c2, MAX_TABLE_COLS - 1);
+
+        let clipped = false;
+        if (maxR < target.r2 || maxC < target.c2) clipped = true;
+
+        while (block.rows.length <= maxR) {
+            block.rows.push(new Array(cols).fill(""));
+        }
+        for (let r = 0; r < block.rows.length; r++) {
+            while (block.rows[r].length <= maxC) block.rows[r].push("");
+        }
+
+        for (let r = target.r1; r <= maxR; r++) {
+            const srcRow = pastedRows[r - target.r1];
+            if (!srcRow) continue;
+            for (let c = target.c1; c <= maxC; c++) {
+                const val = srcRow[c - target.c1];
+                if (val === undefined) continue;
+                if (val === "" && block.rows[r][c] !== "") continue;
+                block.rows[r][c] = val;
+            }
+        }
+
+        if (hasHeader) {
+            block.header = true;
+            toggleInput.checked = true;
+        }
+
+        selection = {
+            anchor: { r: maxR, c: maxC },
+            focus: { r: maxR, c: maxC }
+        };
+
+        renderTableGrid();
+        onFieldChange();
+
+        const msg = clipped
+            ? "📥 Вставлено (обрезано до " + (maxR + 1) + "×" + (maxC + 1) + ")"
+            : "📥 Вставлено: " + (maxR - target.r1 + 1) + "×" + (maxC - target.c1 + 1);
+        setStatus(msg, "ok");
+    }
+
+    gridWrap.addEventListener("paste", (e) => {
+        const target = e.target;
+        if (target && target.tagName === "INPUT") {
+            const cd = e.clipboardData;
+            if (!cd) return;
+            const parsed = parseClipboardTable(cd);
+            if (parsed && (parsed.rows.length > 1 || (parsed.rows[0] && parsed.rows[0].length > 1))) {
+                e.preventDefault();
+                handlePasteIntoTable(cd);
+            }
+        }
+    });
+
+    gridWrap.addEventListener("keydown", (e) => {
+        if (!selection) return;
+        const rect = getSelectionRect();
+
+        if (e.key === "Escape") {
+            selection = null;
+            updateSelectionHighlight();
+            return;
+        }
+// Delete / Backspace — очистить выделенный диапазон
+if ((e.key === "Delete" || e.key === "Backspace") && selection) {
+    const rect = getSelectionRect();
+    const isSingleCell = (rect.r1 === rect.r2 && rect.c1 === rect.c2);
+    // Если одна ячейка — не мешаем обычному удалению символов в input
+    if (!isSingleCell) {
+        e.preventDefault();
+        for (let r = rect.r1; r <= rect.r2; r++) {
+            if (!block.rows[r]) continue;
+            for (let c = rect.c1; c <= rect.c2; c++) {
+                if (block.rows[r][c] !== undefined) {
+                    block.rows[r][c] = "";
+                }
+            }
+        }
+        renderTableGrid();
+        onFieldChange();
+        // Восстанавливаем выделение после перерисовки
+        selection = { anchor: { r: rect.r1, c: rect.c1 }, focus: { r: rect.r2, c: rect.c2 } };
+        updateSelectionHighlight();
+        return;
+    }
+}
+        if (e.key === "a" && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            const rows = block.rows || [];
+            const cols = getMaxCols(rows) || 1;
+            selection = {
+                anchor: { r: 0, c: 0 },
+                focus: { r: rows.length - 1, c: cols - 1 }
+            };
+            updateSelectionHighlight();
+            return;
+        }
+
+        if (e.key === "c" && (e.ctrlKey || e.metaKey) && selection) {
+            e.preventDefault();
+            copySelectionToClipboard();
+            return;
+        }
+
+        if (e.shiftKey && (e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+            e.preventDefault();
+            const rows = block.rows || [];
+            const cols = getMaxCols(rows) || 1;
+            let { r, c } = selection.focus;
+            if (e.key === "ArrowUp") r = Math.max(0, r - 1);
+            else if (e.key === "ArrowDown") r = Math.min(rows.length - 1, r + 1);
+            else if (e.key === "ArrowLeft") c = Math.max(0, c - 1);
+            else if (e.key === "ArrowRight") c = Math.min(cols - 1, c + 1);
+            selection.focus = { r, c };
+            updateSelectionHighlight();
+        }
+    });
+
+    document.addEventListener("mousedown", (e) => {
+        if (!gridWrap.contains(e.target)) {
+            selection = null;
+            updateSelectionHighlight();
+        }
+    });
+
+    document.addEventListener("mouseup", () => {
+        isDragging = false;
+    });
 
     renderTableGrid();
     return wrap;
@@ -1030,7 +1418,6 @@ function createBlockElement(block, index, context) {
         editable = createTableBody(block);
     }
 
-    // Для p / h3 / quote — Enter даёт <br>, добавляем панель
     if ((block.type === "p" || block.type === "h3" || block.type === "quote") && editable) {
         editable.addEventListener("keydown", e => {
             if (e.key === "Enter" && !e.shiftKey) {
@@ -1143,15 +1530,12 @@ function sanitizeHtml(html) {
     if (html == null) return "";
     let s = String(html);
 
-    // Удаляем опасные теги целиком
     s = s.replace(/<(script|style|iframe|object|embed|svg|math)[^>]*>[\s\S]*?<\/\1>/gi, "");
     s = s.replace(/<(script|style|iframe|object|embed|svg|math)[^>]*\/?>/gi, "");
 
-    // Нормализуем переносы
     s = s.replace(/<br\s*\/?>/gi, "<br>");
     s = s.replace(/&nbsp;/gi, " ");
 
-    // Разрешённые теги
     const allowed = /^(strong|b|em|i|u|s|strike|del|br|span|div|p)$/i;
     s = s.replace(/<\/?([a-zA-Z][a-zA-Z0-9]*)\b([^>]*)>/g, function(match, tagName, attrs) {
         const tag = tagName.toLowerCase();
@@ -1159,7 +1543,6 @@ function sanitizeHtml(html) {
         const isClosing = match.charAt(1) === "/";
         if (isClosing) return "</" + tag + ">";
 
-        // Разрешаем style только с text-align
         let safeAttrs = "";
         const styleMatch = attrs.match(/style\s*=\s*["']([^"']*)["']/i);
         if (styleMatch) {
@@ -1171,7 +1554,6 @@ function sanitizeHtml(html) {
         return "<" + tag + safeAttrs + ">";
     });
 
-    // Схлопываем пробелы
     s = s.replace(/[ \t]+/g, " ");
     s = s.trim();
     return s;
@@ -2848,24 +3230,13 @@ function parseCsvLine(line, delim) {
         const ch = line[i];
         if (inQuotes) {
             if (ch === '"') {
-                if (line[i+1] === '"') {
-                    cur += '"';
-                    i++;
-                } else {
-                    inQuotes = false;
-                }
-            } else {
-                cur += ch;
-            }
+                if (line[i+1] === '"') { cur += '"'; i++; }
+                else { inQuotes = false; }
+            } else { cur += ch; }
         } else {
-            if (ch === '"') {
-                inQuotes = true;
-            } else if (ch === delim) {
-                cells.push(cur);
-                cur = "";
-            } else {
-                cur += ch;
-            }
+            if (ch === '"') { inQuotes = true; }
+            else if (ch === delim) { cells.push(cur); cur = ""; }
+            else { cur += ch; }
         }
     }
     cells.push(cur);
@@ -2889,8 +3260,7 @@ function parseCsv(text) {
     }
     const rows = [];
     for (const line of lines) {
-        if (!line.trim() && rows.length > 0) continue;
-        if (!line.trim() && rows.length === 0) continue;
+        if (!line.trim()) continue;
         rows.push(parseCsvLine(line, delim));
     }
     return { rows, delim };
@@ -2915,15 +3285,9 @@ function buildSingleMultiQuestions(rows, headers) {
         const lineNum = r + 1;
         const typeRaw = (row[idx["type"]] || "").trim().toLowerCase();
         const type = typeRaw === "multi" ? "multi" : (typeRaw === "single" ? "single" : null);
-        if (!type) {
-            errors.push("Строка " + lineNum + ": неизвестный тип «" + typeRaw + "» (ожидается single или multi)");
-            continue;
-        }
+        if (!type) { errors.push("Строка " + lineNum + ": неизвестный тип «" + typeRaw + "»"); continue; }
         const text = (row[idx["text"]] || "").trim();
-        if (!text) {
-            errors.push("Строка " + lineNum + ": пустой текст вопроса");
-            continue;
-        }
+        if (!text) { errors.push("Строка " + lineNum + ": пустой текст вопроса"); continue; }
         const options = [];
         for (let k = 1; k <= 10; k++) {
             const colName = "option" + k;
@@ -2932,40 +3296,17 @@ function buildSingleMultiQuestions(rows, headers) {
             const val = (row[ci] || "").trim();
             if (val) options.push(val);
         }
-        if (options.length < 2) {
-            errors.push("Строка " + lineNum + ": меньше 2 вариантов ответа");
-            continue;
-        }
+        if (options.length < 2) { errors.push("Строка " + lineNum + ": меньше 2 вариантов"); continue; }
         const correctRaw = (row[idx["correct"]] || "").trim();
-        if (!correctRaw) {
-            errors.push("Строка " + lineNum + ": пустое поле correct");
-            continue;
-        }
+        if (!correctRaw) { errors.push("Строка " + lineNum + ": пустое поле correct"); continue; }
         const correctParts = correctRaw.split("|").map(s => s.trim()).filter(Boolean);
         const badOnes = correctParts.filter(c => !options.includes(c));
-        if (badOnes.length) {
-            errors.push("Строка " + lineNum + ": правильный ответ(ы) «" + badOnes.join(", ") + "» не найдены среди вариантов");
-            continue;
-        }
-        if (type === "single" && correctParts.length !== 1) {
-            errors.push("Строка " + lineNum + ": у single должен быть ровно 1 правильный ответ, найдено " + correctParts.length);
-            continue;
-        }
-        if (type === "multi" && correctParts.length < 1) {
-            errors.push("Строка " + lineNum + ": у multi должен быть хотя бы 1 правильный ответ");
-            continue;
-        }
+        if (badOnes.length) { errors.push("Строка " + lineNum + ": ответы «" + badOnes.join(", ") + "» не найдены"); continue; }
+        if (type === "single" && correctParts.length !== 1) { errors.push("Строка " + lineNum + ": у single должен быть 1 ответ"); continue; }
+        if (type === "multi" && correctParts.length < 1) { errors.push("Строка " + lineNum + ": у multi нужен хотя бы 1 ответ"); continue; }
         const explain = (row[idx["explain"]] || "").trim();
         const group = (row[idx["group"]] || "").trim() || null;
-
-        questions.push({
-            type,
-            text,
-            options,
-            correct: correctParts,
-            explain,
-            group
-        });
+        questions.push({ type, text, options, correct: correctParts, explain, group });
     }
     return { questions, errors };
 }
@@ -2988,16 +3329,10 @@ function buildMatchQuestions(rows, headers) {
             const left = (row[lCi] || "").trim();
             const right = (row[rCi] || "").trim();
             if (!left && !right) continue;
-            if (!left || !right) {
-                errors.push("Строка " + lineNum + ": пара " + k + " заполнена не полностью");
-                continue;
-            }
+            if (!left || !right) { errors.push("Строка " + lineNum + ": пара " + k + " неполная"); continue; }
             pairs.push({ left, right });
         }
-        if (pairs.length === 0) {
-            errors.push("Строка " + lineNum + ": ни одной полной пары");
-            continue;
-        }
+        if (pairs.length === 0) { errors.push("Строка " + lineNum + ": ни одной пары"); continue; }
         const explain = (row[idx["explain"]] || "").trim();
         const group = (row[idx["group"]] || "").trim() || null;
         questions.push({ type: "match", text, pairs, explain, group });
@@ -3017,14 +3352,8 @@ function buildCardQuestions(rows, headers) {
         const front = (row[idx["front"]] || "").trim();
         const back = (row[idx["back"]] || "").trim();
         if (!front && !back) continue;
-        if (!front) {
-            errors.push("Строка " + lineNum + ": пустая передняя сторона (front)");
-            continue;
-        }
-        if (!back) {
-            errors.push("Строка " + lineNum + ": пустая задняя сторона (back)");
-            continue;
-        }
+        if (!front) { errors.push("Строка " + lineNum + ": пустая front"); continue; }
+        if (!back) { errors.push("Строка " + lineNum + ": пустая back"); continue; }
         const frontImage = (row[idx["frontimage"]] || "").trim();
         const backImage = (row[idx["backimage"]] || "").trim();
         const group = (row[idx["group"]] || "").trim() || null;
@@ -3044,22 +3373,22 @@ function openCsvImport() {
 function renderCsvImportStep1() {
     const body = document.getElementById("csv-modal-body");
     let html = `<h2>📥 Импорт вопросов из CSV</h2>`;
-    html += `<p class="csv-modal-desc">Выбери тип вопросов в файле. Или нажми «Определить автоматически» — мы посмотрим на заголовки и сами поймём.</p>`;
+    html += `<p class="csv-modal-desc">Выбери тип вопросов в файле. Или нажми «Определить автоматически» — мы посмотрим на заголовки.</p>`;
     html += `<div class="csv-type-grid">`;
     html += `<button class="csv-type-card" onclick="csvPickType('single_multi')">`;
     html += `<div class="csv-type-icon">✏</div>`;
     html += `<div class="csv-type-title">Один / Несколько</div>`;
-    html += `<div class="csv-type-desc">Вопросы с выбором одного или нескольких правильных</div>`;
+    html += `<div class="csv-type-desc">Вопросы с выбором</div>`;
     html += `</button>`;
     html += `<button class="csv-type-card" onclick="csvPickType('match')">`;
     html += `<div class="csv-type-icon">🔗</div>`;
     html += `<div class="csv-type-title">Соответствие</div>`;
-    html += `<div class="csv-type-desc">Соединить пары: слово ↔ перевод</div>`;
+    html += `<div class="csv-type-desc">Соединить пары</div>`;
     html += `</button>`;
     html += `<button class="csv-type-card" onclick="csvPickType('card')">`;
     html += `<div class="csv-type-icon">🎴</div>`;
     html += `<div class="csv-type-title">Карточки</div>`;
-    html += `<div class="csv-type-desc">Передняя и задняя стороны для запоминания</div>`;
+    html += `<div class="csv-type-desc">Передняя и задняя</div>`;
     html += `</button>`;
     html += `</div>`;
     html += `<div class="csv-modal-actions">`;
@@ -3102,42 +3431,21 @@ function csvPickType(kind) {
 function processCsvText(text, kind, fileName) {
     const parsed = parseCsv(text);
     const rows = parsed.rows;
-    if (rows.length < 2) {
-        renderCsvError("Файл пустой или содержит только заголовок.");
-        return;
-    }
+    if (rows.length < 2) { renderCsvError("Файл пустой или только заголовок."); return; }
     const headers = rows[0];
     if (kind === "auto") {
         const detected = detectCsvKind(headers);
-        if (!detected) {
-            renderCsvError("Не удалось определить тип файла по заголовкам. Попробуй выбрать тип вручную.");
-            return;
-        }
+        if (!detected) { renderCsvError("Не удалось определить тип."); return; }
         kind = detected;
     }
     let result;
     let kindLabel;
-    if (kind === "single_multi") {
-        result = buildSingleMultiQuestions(rows, headers);
-        kindLabel = "Один / Несколько";
-    } else if (kind === "match") {
-        result = buildMatchQuestions(rows, headers);
-        kindLabel = "Соответствие";
-    } else if (kind === "card") {
-        result = buildCardQuestions(rows, headers);
-        kindLabel = "Карточки";
-    } else {
-        renderCsvError("Неизвестный тип: " + kind);
-        return;
-    }
+    if (kind === "single_multi") { result = buildSingleMultiQuestions(rows, headers); kindLabel = "Один / Несколько"; }
+    else if (kind === "match") { result = buildMatchQuestions(rows, headers); kindLabel = "Соответствие"; }
+    else if (kind === "card") { result = buildCardQuestions(rows, headers); kindLabel = "Карточки"; }
+    else { renderCsvError("Неизвестный тип: " + kind); return; }
 
-    csvImportState = {
-        kind,
-        kindLabel,
-        fileName,
-        questions: result.questions,
-        errors: result.errors
-    };
+    csvImportState = { kind, kindLabel, fileName, questions: result.questions, errors: result.errors };
     renderCsvImportStep2();
 }
 
@@ -3151,22 +3459,20 @@ function renderCsvImportStep2() {
     html += `<p class="csv-modal-desc">Файл: <strong>${escapeHtml(st.fileName)}</strong> · Тип: ${escapeHtml(st.kindLabel)}</p>`;
 
     html += `<div class="csv-preview">`;
-    html += `<div class="csv-preview-row"><span>Всего строк (с данными)</span><strong>${total}</strong></div>`;
-    html += `<div class="csv-preview-row"><span class="csv-preview-ok">✓ Валидных вопросов</span><strong class="csv-preview-ok">${st.questions.length}</strong></div>`;
-    html += `<div class="csv-preview-row"><span class="csv-preview-err">✗ Ошибок (пропущены)</span><strong class="csv-preview-err">${st.errors.length}</strong></div>`;
+    html += `<div class="csv-preview-row"><span>Всего строк</span><strong>${total}</strong></div>`;
+    html += `<div class="csv-preview-row"><span class="csv-preview-ok">✓ Валидных</span><strong class="csv-preview-ok">${st.questions.length}</strong></div>`;
+    html += `<div class="csv-preview-row"><span class="csv-preview-err">✗ Ошибок</span><strong class="csv-preview-err">${st.errors.length}</strong></div>`;
     html += `</div>`;
 
     if (st.errors.length > 0) {
         html += `<div class="csv-error-list">`;
-        html += `<div class="csv-error-title">Ошибки в строках (эти вопросы не будут импортированы):</div>`;
-        st.errors.forEach(e => {
-            html += `<div class="csv-error-item">• ${escapeHtml(e)}</div>`;
-        });
+        html += `<div class="csv-error-title">Ошибки:</div>`;
+        st.errors.forEach(e => { html += `<div class="csv-error-item">• ${escapeHtml(e)}</div>`; });
         html += `</div>`;
     }
 
     if (st.questions.length === 0) {
-        html += `<div class="csv-preview" style="background:var(--error-bg);border-color:var(--error-border);color:var(--error);">Ни одного валидного вопроса. Исправь файл и попробуй снова.</div>`;
+        html += `<div class="csv-preview" style="background:var(--error-bg);color:var(--error);">Ни одного валидного вопроса.</div>`;
         html += `<div class="csv-modal-actions">`;
         html += `<button class="btn btn-text" onclick="csvBackToStep1()">← Назад</button>`;
         html += `<button class="btn btn-text" onclick="closeCsvModal()">Закрыть</button>`;
@@ -3179,21 +3485,16 @@ function renderCsvImportStep2() {
     html += `<div class="csv-samples-title">Превью (первые 3)</div>`;
     st.questions.slice(0, 3).forEach((q, i) => {
         let line = "";
-        if (q.type === "single" || q.type === "multi") {
-            line = `<strong>${i+1}.</strong> [${q.type}] ${escapeHtml(q.text)} → <em>${escapeHtml(q.correct.join(", "))}</em>`;
-        } else if (q.type === "match") {
-            const pairsStr = q.pairs.map(p => p.left + " → " + p.right).join("; ");
-            line = `<strong>${i+1}.</strong> [match] ${escapeHtml(pairsStr)}`;
-        } else if (q.type === "card") {
-            line = `<strong>${i+1}.</strong> [card] ${escapeHtml(q.front)} → ${escapeHtml(q.back)}`;
-        }
+        if (q.type === "single" || q.type === "multi") line = `<strong>${i+1}.</strong> [${q.type}] ${escapeHtml(q.text)}`;
+        else if (q.type === "match") line = `<strong>${i+1}.</strong> [match] ${escapeHtml(q.pairs.map(p => p.left).join(", "))}`;
+        else if (q.type === "card") line = `<strong>${i+1}.</strong> [card] ${escapeHtml(q.front)} → ${escapeHtml(q.back)}`;
         html += `<div class="csv-samples-item">${line}</div>`;
     });
     html += `</div>`;
 
     const lesson = currentLesson();
     const existing = (lesson.questions || []).length;
-    html += `<p class="csv-modal-desc" style="margin-top:16px;">В текущем тесте <strong>${existing}</strong> вопрос(ов). Что сделать с ними?</p>`;
+    html += `<p class="csv-modal-desc" style="margin-top:16px;">В текущем тесте <strong>${existing}</strong> вопрос(ов). Что сделать?</p>`;
 
     html += `<div class="csv-modal-actions">`;
     html += `<button class="btn btn-text" onclick="csvBackToStep1()">← Назад</button>`;
@@ -3213,10 +3514,7 @@ function csvApplyImport(mode) {
     if (!csvImportState) return;
     readFromDom();
     const lesson = currentLesson();
-    if (!lesson || lesson.type !== "quiz") {
-        renderCsvError("Импорт возможен только в тест.");
-        return;
-    }
+    if (!lesson || lesson.type !== "quiz") { renderCsvError("Импорт возможен только в тест."); return; }
     if (!lesson.questions) lesson.questions = [];
 
     if (!lesson.groups) lesson.groups = [];
@@ -3229,17 +3527,14 @@ function csvApplyImport(mode) {
         if (q.group === undefined) q.group = null;
     });
 
-    if (mode === "replace") {
-        lesson.questions = csvImportState.questions;
-    } else {
-        lesson.questions = lesson.questions.concat(csvImportState.questions);
-    }
+    if (mode === "replace") lesson.questions = csvImportState.questions;
+    else lesson.questions = lesson.questions.concat(csvImportState.questions);
 
     refreshAll();
 
     const cnt = csvImportState.questions.length;
     const errCnt = csvImportState.errors.length;
-    setStatus("📥 Импортировано вопросов: " + cnt + (errCnt ? " (пропущено с ошибками: " + errCnt + ")" : ""), "ok");
+    setStatus("📥 Импортировано: " + cnt + (errCnt ? " (ошибок: " + errCnt + ")" : ""), "ok");
     csvImportState = null;
     closeCsvModal();
 }
