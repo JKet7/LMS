@@ -20,13 +20,15 @@ echo  ========================================================
 echo.
 echo   [1] Создать новый курс
 echo   [2] Обновить ВСЕ курсы из _source
-echo   [3] Выход
+echo   [3] Запустить сервер (для правок с телефона и сохранения в один клик)
+echo   [4] Выход
 echo.
 set /p choice="  Твой выбор: "
 
 if "%choice%"=="1" goto createCourse
 if "%choice%"=="2" goto updateAll
-if "%choice%"=="3" goto end
+if "%choice%"=="3" goto runServer
+if "%choice%"=="4" goto end
 goto menu
 
 REM ============================================================
@@ -214,6 +216,37 @@ echo };
 goto :eof
 
 REM ============================================================
+REM ЗАПУСК СЕРВЕРА
+REM ============================================================
+:runServer
+cls
+echo.
+echo  ========================================================
+echo    ЗАПУСК ЛОКАЛЬНОГО СЕРВЕРА
+echo  ========================================================
+echo.
+where node >nul 2>nul
+if errorlevel 1 (
+    echo  [ОШИБКА] Node.js не установлен.
+    echo  Скачай с https://nodejs.org/ и установи.
+    echo.
+    pause
+    goto menu
+)
+if not exist "server.js" (
+    echo  [ОШИБКА] Файл server.js не найден в папке %CD%.
+    echo  Положи server.js рядом с courses.bat.
+    echo.
+    pause
+    goto menu
+)
+echo  Запускаю сервер...
+echo  Закрой это окно или нажми Ctrl+C, чтобы остановить.
+echo.
+start "" http://localhost:3000/courses.html
+node server.js
+pause
+goto menu
 :end
 endlocal
 exit /b 0

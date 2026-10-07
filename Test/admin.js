@@ -63,7 +63,7 @@ const PROGRESS_KEY = "kp_course_v1_" + COURSE_KEY;
 const MAX_MEMO_CELLS = 8;
 const MAX_TABLE_ROWS = 10;
 const MAX_TABLE_COLS = 10;
-const MAX_LIST_LEVEL = 2; // уровни 0, 1, 2 — три уровня
+const MAX_LIST_LEVEL = 2;
 
 let pvState = null;
 
@@ -888,7 +888,6 @@ function createTableBody(block) {
     let selection = null;
     let isDragging = false;
 
-    // ===== Верхняя панель =====
     const top = document.createElement("div");
     top.className = "table-editor-top";
 
@@ -914,7 +913,6 @@ function createTableBody(block) {
 
     wrap.appendChild(top);
 
-    // ===== Кнопки =====
     const actions = document.createElement("div");
     actions.className = "table-editor-actions";
 
@@ -1012,7 +1010,6 @@ function createTableBody(block) {
 
     wrap.appendChild(actions);
 
-    // ===== Сетка =====
     const gridWrap = document.createElement("div");
     gridWrap.className = "table-editor-grid-wrap";
     const gridTable = document.createElement("table");
@@ -1262,29 +1259,25 @@ function createTableBody(block) {
             updateSelectionHighlight();
             return;
         }
-// Delete / Backspace — очистить выделенный диапазон
-if ((e.key === "Delete" || e.key === "Backspace") && selection) {
-    const rect = getSelectionRect();
-    const isSingleCell = (rect.r1 === rect.r2 && rect.c1 === rect.c2);
-    // Если одна ячейка — не мешаем обычному удалению символов в input
-    if (!isSingleCell) {
-        e.preventDefault();
-        for (let r = rect.r1; r <= rect.r2; r++) {
-            if (!block.rows[r]) continue;
-            for (let c = rect.c1; c <= rect.c2; c++) {
-                if (block.rows[r][c] !== undefined) {
-                    block.rows[r][c] = "";
+
+        if ((e.key === "Delete" || e.key === "Backspace") && selection) {
+            const isSingleCell = (rect.r1 === rect.r2 && rect.c1 === rect.c2);
+            if (!isSingleCell) {
+                e.preventDefault();
+                for (let r = rect.r1; r <= rect.r2; r++) {
+                    if (!block.rows[r]) continue;
+                    for (let c = rect.c1; c <= rect.c2; c++) {
+                        if (block.rows[r][c] !== undefined) block.rows[r][c] = "";
+                    }
                 }
+                renderTableGrid();
+                onFieldChange();
+                selection = { anchor: { r: rect.r1, c: rect.c1 }, focus: { r: rect.r2, c: rect.c2 } };
+                updateSelectionHighlight();
+                return;
             }
         }
-        renderTableGrid();
-        onFieldChange();
-        // Восстанавливаем выделение после перерисовки
-        selection = { anchor: { r: rect.r1, c: rect.c1 }, focus: { r: rect.r2, c: rect.c2 } };
-        updateSelectionHighlight();
-        return;
-    }
-}
+
         if (e.key === "a" && (e.ctrlKey || e.metaKey)) {
             e.preventDefault();
             const rows = block.rows || [];
@@ -1338,7 +1331,7 @@ function getMaxCols(rows) {
     return m;
 }
 
-/* ===== RICH-ПАНЕЛЬ ДЛЯ P / H3 / QUOTE ===== */
+/* ===== RICH-ПАНЕЛЬ ===== */
 function createRichToolbar(editable) {
     const bar = document.createElement("div");
     bar.className = "rich-toolbar";
@@ -1455,24 +1448,63 @@ function createBlockElement(block, index, context) {
     return wrapper;
 }
 
+/* ===== РЕДАКТОР МЕДИА (с загрузкой на сервер) ===== */
 function createMediaBlock(block, type) {
     const wrap = document.createElement("div");
     wrap.className = "media-editor";
 
+    const isImage = type === "image";
+    const uploadType = isImage ? "images" : "videos";
+    const accept = isImage
+        ? "image/png,image/jpeg,image/gif,image/webp,image/svg+xml"
+        : "video/mp4,video/webm,video/ogg";
+
+    const srcRow = document.createElement("div");
+    srcRow.className = "media-src-row";
+
     const input = document.createElement("input");
     input.type = "text";
     input.className = "input media-src-input";
-    input.placeholder = type === "image"
+    input.placeholder = isImage
         ? "images/pic.png  или  https://example.com/pic.png"
         : "videos/lesson.mp4  или  https://example.com/video.mp4";
     input.value = block.src || "";
-    wrap.appendChild(input);
+    srcRow.appendChild(input);
+
+    const fileBtn = document.createElement("button");
+    fileBtn.type = "button";
+    fileBtn.className = "btn btn-outline media-file-btn";
+    fileBtn.textContent = "📁 Выбрать файл";
+    fileBtn.title = "Выбрать файл с компьютера и загрузить в папку курса";
+    srcRow.appendChild(fileBtn);
+
+    wrap.appendChild(srcRow);
+
+    const fileInput = document.createElement("input");
+    fileInput.type = "file";
+    fileInput.accept = accept;
+    fileInput.style.display = "none";
+    wrap.appendChild(fileInput);
+
+    const progressWrap = document.createElement("div");
+    progressWrap.className = "media-progress";
+    progressWrap.style.display = "none";
+    const progressBar = document.createElement("div");
+    progressBar.className = "media-progress-bar";
+    const progressFill = document.createElement("div");
+    progressFill.className = "media-progress-fill";
+    progressBar.appendChild(progressFill);
+    const progressText = document.createElement("div");
+    progressText.className = "media-progress-text";
+    progressWrap.appendChild(progressBar);
+    progressWrap.appendChild(progressText);
+    wrap.appendChild(progressWrap);
 
     const hint = document.createElement("div");
     hint.className = "field-hint";
-    hint.innerHTML = type === "image"
-        ? `Путь к файлу в папке курса или ссылка.<br>Файлы клади в <code>images/</code> рядом с <code>index.html</code>. Пиши <b>images/foo.png</b> — без ведущего слэша.`
-        : `Путь к файлу в папке курса или ссылка.<br>Файлы клади в <code>videos/</code> рядом с <code>index.html</code>. Пиши <b>videos/foo.mp4</b> — без ведущего слэша. Формат: MP4 (H.264).`;
+    hint.innerHTML = isImage
+        ? `Можно: <b>Ctrl+V</b> (вставить из буфера), <b>перетащить файл</b>, или выбрать через кнопку.<br>Файлы кладутся в <code>images/</code> рядом с <code>index.html</code>.`
+        : `Можно: <b>перетащить файл</b> или выбрать через кнопку.<br>Файлы кладутся в <code>videos/</code> рядом с <code>index.html</code>. Формат: MP4 (H.264) или WebM.`;
     wrap.appendChild(hint);
 
     const preview = document.createElement("div");
@@ -1486,7 +1518,7 @@ function createMediaBlock(block, type) {
             preview.innerHTML = '<div class="media-preview-empty">Превью появится здесь</div>';
             return;
         }
-        if (type === "image") {
+        if (isImage) {
             const img = document.createElement("img");
             img.alt = "";
             img.onerror = () => {
@@ -1506,6 +1538,13 @@ function createMediaBlock(block, type) {
         }
     };
 
+    const setSrc = (newSrc) => {
+        input.value = newSrc;
+        block.src = newSrc;
+        renderPreview();
+        onFieldChange();
+    };
+
     input.addEventListener("input", () => {
         block.src = input.value.trim();
         renderPreview();
@@ -1515,6 +1554,120 @@ function createMediaBlock(block, type) {
         block.src = input.value.trim();
         onFieldChange();
     });
+
+    const uploadFile = (file) => {
+        if (!file) return;
+
+        const isFileImage = file.type.startsWith("image/");
+        const isFileVideo = file.type.startsWith("video/");
+        if (isImage && !isFileImage) {
+            setStatus("⚠ Это не картинка", "err");
+            return;
+        }
+        if (!isImage && !isFileVideo) {
+            setStatus("⚠ Это не видео", "err");
+            return;
+        }
+
+        const defaultName = file.name || (isImage ? "image.png" : "video.mp4");
+        let name = prompt("Имя файла (с расширением):", defaultName);
+        if (!name) return;
+        name = name.trim();
+        if (!name) return;
+
+        const m = location.pathname.match(/^\/([^\/]+)\/admin\.html$/);
+        const course = m ? m[1] : COURSE_KEY;
+
+        progressWrap.style.display = "block";
+        progressFill.style.width = "0%";
+        progressText.textContent = "Загрузка... 0%";
+
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", `/upload?course=${encodeURIComponent(course)}&type=${uploadType}&filename=${encodeURIComponent(name)}`);
+
+        xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) {
+                const pct = Math.round((e.loaded / e.total) * 100);
+                progressFill.style.width = pct + "%";
+                progressText.textContent = "Загрузка... " + pct + "%";
+            }
+        };
+
+        xhr.onload = () => {
+            progressWrap.style.display = "none";
+            if (xhr.status === 200) {
+                try {
+                    const data = JSON.parse(xhr.responseText);
+                    setSrc(data.path);
+                    setStatus("✓ Загружено: " + data.path, "ok");
+                } catch (e) {
+                    setStatus("⚠ Ответ сервера непонятен", "err");
+                }
+            } else {
+                setStatus("⚠ Ошибка загрузки: " + xhr.status + " " + xhr.responseText, "err");
+            }
+        };
+
+        xhr.onerror = () => {
+            progressWrap.style.display = "none";
+            setStatus("⚠ Сервер не запущен или недоступен. Запусти server.js.", "err");
+        };
+
+        xhr.send(file);
+    };
+
+    fileBtn.onclick = () => fileInput.click();
+    fileInput.onchange = () => {
+        const f = fileInput.files && fileInput.files[0];
+        if (f) uploadFile(f);
+        fileInput.value = "";
+    };
+
+    const dropZone = document.createElement("div");
+    dropZone.className = "media-drop-zone";
+    dropZone.textContent = "Перетащи файл сюда";
+    wrap.appendChild(dropZone);
+
+    ["dragenter", "dragover"].forEach(ev => {
+        dropZone.addEventListener(ev, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.classList.add("is-over");
+        });
+    });
+    ["dragleave", "drop"].forEach(ev => {
+        dropZone.addEventListener(ev, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.classList.remove("is-over");
+        });
+    });
+    dropZone.addEventListener("drop", (e) => {
+        const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+        if (f) uploadFile(f);
+    });
+
+    if (isImage) {
+        wrap.addEventListener("paste", (e) => {
+            const items = e.clipboardData && e.clipboardData.items;
+            if (!items) return;
+            for (const item of items) {
+                if (item.type.startsWith("image/")) {
+                    const file = item.getAsFile();
+                    if (file) {
+                        e.preventDefault();
+                        const ext = file.type.split("/")[1] || "png";
+                        const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+                        const generatedName = `paste_${ts}.${ext}`;
+                        Object.defineProperty(file, "name", { value: generatedName, writable: false });
+                        uploadFile(file);
+                        return;
+                    }
+                }
+            }
+        });
+        wrap.tabIndex = 0;
+    }
 
     renderPreview();
     return wrap;
@@ -2244,9 +2397,7 @@ function removeOption(btn) {
     renderQuizEditor(lesson); saveDraft();
 }
 
-/* ============================================================
-   ЧТЕНИЕ contentEditable-БЛОКОВ В ОБЪЕКТ
-   ============================================================ */
+/* ===== ЧТЕНИЕ contentEditable ===== */
 function readEditableBlocks(containerId, blocks) {
     const container = document.getElementById(containerId);
     if (!container || !Array.isArray(blocks)) return;
@@ -3113,21 +3264,28 @@ function buildDataJs() {
 
 async function saveToFile() {
     const content = buildDataJs();
-    localStorage.removeItem(DRAFT_KEY);
-    if (window.showSaveFilePicker) {
-        try {
-            const handle = await window.showSaveFilePicker({
-                suggestedName: "data.js",
-                types: [{ description: "JavaScript", accept: { "text/javascript": [".js"] } }]
-            });
-            const w = await handle.createWritable();
-            await w.write(content); await w.close();
-            setStatus("✓ data.js сохранён. Обнови страницу курса (F5).", "ok");
-            return;
-        } catch (e) { if (e.name === "AbortError") return; }
+
+    try {
+        const res = await fetch("/save-data", {
+            method: "POST",
+            headers: { "Content-Type": "text/javascript; charset=utf-8" },
+            body: content
+        });
+        if (!res.ok) {
+            const msg = await res.text();
+            throw new Error(msg || ("HTTP " + res.status));
+        }
+        localStorage.removeItem(DRAFT_KEY);
+        setStatus("✓ data.js сохранён на сервере. Обнови страницу курса (F5).", "ok");
+        return;
+    } catch (e) {
+        console.warn("Сервер недоступен:", e);
+        setStatus(
+            "⚠ Сервер не запущен или недоступен. Запусти server.js, или используй кнопку «📤 Скачать».",
+            "err"
+        );
+        return;
     }
-    downloadBlob("data.js", content);
-    setStatus("✓ Файл скачан в Загрузки. Перемести в папку курса.", "ok");
 }
 function downloadData() { downloadBlob("data.js", buildDataJs()); setStatus("📤 data.js скачан", "ok"); }
 function downloadBlob(f, c) {
@@ -3146,7 +3304,7 @@ function setStatus(t, type) {
     el.textContent = t;
     el.className = "status" + (type ? " " + type : "");
     el.classList.add("show");
-    setTimeout(() => el.classList.remove("show"), 4000);
+    setTimeout(() => el.classList.remove("show"), 6000);
 }
 
 const CSV_TEMPLATES = {

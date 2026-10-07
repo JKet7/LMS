@@ -47,12 +47,12 @@ function showFatalError(reason) {
                 <strong>Если вы автор курса:</strong><br>
                 1. Откройте <code style="background: rgba(0,0,0,.06); padding: 2px 6px; border-radius: 4px; font-family: ui-monospace, Menlo, Consolas, monospace;">admin.html</code> этого курса.<br>
                 2. Нажмите кнопку <strong>↻ Откатить</strong> в шапке.<br>
-                3. Проверьте, что файл <code style="background: rgba(0,0,0,.06); padding: 2px 6px; border-radius: 4px; font-family: ui-monospace, Menlo, Consolas, monospace;">data.js</code> не повреждён (нет опечаток, все скобки закрыты).
+                3. Проверьте, что файл <code style="background: rgba(0,0,0,.06); padding: 2px 6px; border-radius: 4px; font-family: ui-monospace, Menlo, Consolas, monospace;">data.js</code> не повреждён.
             </div>
             <div style="margin-top: 16px; padding: 14px 18px; background: #EBE4D4; border-radius: 8px; font-size: 14px; line-height: 1.7;">
                 <strong>Если вы читатель:</strong><br>
-                1. Обновите страницу (<code style="background: rgba(0,0,0,.06); padding: 2px 6px; border-radius: 4px; font-family: ui-monospace, Menlo, Consolas, monospace;">Ctrl+F5</code> или <code style="background: rgba(0,0,0,.06); padding: 2px 6px; border-radius: 4px; font-family: ui-monospace, Menlo, Consolas, monospace;">Cmd+Shift+R</code>).<br>
-                2. Если не помогает — сообщите автору курса о проблеме.
+                1. Обновите страницу (<code style="background: rgba(0,0,0,.06); padding: 2px 6px; border-radius: 4px; font-family: ui-monospace, Menlo, Consolas, monospace;">Ctrl+F5</code>).<br>
+                2. Если не помогает — сообщите автору курса.
             </div>
         </div>
     `;
@@ -75,8 +75,6 @@ let glossaryState = {
     searchQuery: ""
 };
 
-// История навигации: куда вернуться при нажатии «← Назад».
-// null — некуда возвращаться (пришли из меню). Объект — откуда пришли.
 let navHistory = null;
 
 const appContainer = document.getElementById("app-container");
@@ -129,7 +127,7 @@ function detectType(q) {
 }
 
 // ============================================================
-// Миграция старых списков (items: [строка, ...]) → {text, level}
+// Миграция старых списков
 // ============================================================
 function migrateListBlock(b) {
     if (!b || b.type !== "ul") return;
@@ -249,6 +247,13 @@ function getQuizState(id) {
     if (!lessonState[id]._optionsOrder) lessonState[id]._optionsOrder = null;
     if (!lessonState[id]._matchOrder) lessonState[id]._matchOrder = null;
     return lessonState[id];
+}
+
+function getNextLessonId(currentId) {
+    const ids = Object.keys(allLessons);
+    const idx = ids.indexOf(currentId);
+    if (idx === -1 || idx === ids.length - 1) return null;
+    return ids[idx + 1];
 }
 
 function renderMenu() {
@@ -393,9 +398,6 @@ function renderTable(b) {
     return html;
 }
 
-// ============================================================
-// РЕНДЕР СПИСКА (UL) — с уровнями и стилями
-// ============================================================
 function renderList(b) {
     const style = b.style || "bullet";
     const items = b.items || [];
@@ -428,10 +430,10 @@ function renderList(b) {
 function renderContentBlocks(blocks) {
     let html = "";
     (blocks || []).forEach(b => {
-        if (b.type === "p") html += `<p>${b.text}</p>`;
-        else if (b.type === "h3") html += `<h3>${b.text}</h3>`;
+        if (b.type === "p") html += `<p>${b.text || ""}</p>`;
+        else if (b.type === "h3") html += `<h3>${b.text || ""}</h3>`;
         else if (b.type === "ul") html += renderList(b);
-        else if (b.type === "quote") html += `<div class="quote">${b.text}</div>`;
+        else if (b.type === "quote") html += `<div class="quote">${b.text || ""}</div>`;
         else if (b.type === "link") html += renderLinkBlock(b);
         else if (b.type === "image" && b.src) html += `<div class="slide-media"><img src="${b.src}" alt="${b.alt || ''}" loading="lazy"></div>`;
         else if (b.type === "video" && b.src) {
@@ -448,16 +450,32 @@ function renderContentBlocks(blocks) {
 function renderSlide() {
     const slide = slides[currentSlide];
     const isLast = currentSlide === slides.length - 1;
+
     let html = `<h2 class="slide-title">${slide.title}</h2>`;
     html += `<div class="slide-content">`;
     html += renderContentBlocks(slide.content);
     html += `</div>`;
+
     html += `<div class="nav-row">`;
     if (currentSlide > 0) html += `<button class="nav-btn" onclick="goPrev()">← Назад</button>`;
     else html += `<div></div>`;
-    if (isLast) html += `<button class="nav-btn primary" onclick="finishLesson()">Завершить блок</button>`;
-    else html += `<button class="nav-btn primary" onclick="goNext()">Дальше →</button>`;
+
+    if (isLast) {
+        html += `<div class="nav-row-right">`;
+        html += `<button class="nav-btn" onclick="finishLesson()">Завершить блок</button>`;
+        const nextId = getNextLessonId(currentLessonId);
+        if (nextId) {
+            const nextTitle = escapeHtml(allLessons[nextId].title || "далее");
+            html += `<button class="nav-btn primary" onclick="goToNextLesson()">${nextTitle} →</button>`;
+        } else {
+            html += `<button class="nav-btn primary" onclick="exitToMenu()">← В меню</button>`;
+        }
+        html += `</div>`;
+    } else {
+        html += `<button class="nav-btn primary" onclick="goNext()">Дальше →</button>`;
+    }
     html += `</div>`;
+
     slideContent.innerHTML = html;
 
     slideContent.querySelectorAll('.slide-media img, .slide-media video').forEach(el => {
@@ -475,6 +493,7 @@ function renderSlide() {
 
     renderTopicList(); updateProgressBar();
 }
+
 function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, c => ({
         "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -560,10 +579,43 @@ function goBack() {
 
 function goNext() { if (currentSlide < slides.length - 1) { currentSlide++; markVisited(currentSlide); renderSlide(); window.scrollTo({top:0,behavior:"smooth"}); } }
 function goPrev() { if (currentSlide > 0) { currentSlide--; markVisited(currentSlide); renderSlide(); window.scrollTo({top:0,behavior:"smooth"}); } }
+
 function finishLesson() {
     const s = getState(currentLessonId);
     s.completed = true; s.currentSlide = currentSlide; saveAll();
     showScreen("menu"); renderMenu();
+}
+
+function finishLessonSilent() {
+    const s = getState(currentLessonId);
+    s.completed = true;
+    s.currentSlide = currentSlide;
+    saveAll();
+}
+
+function goToNextLesson() {
+    finishLessonSilent();
+    const nextId = getNextLessonId(currentLessonId);
+    if (!nextId) { showScreen("menu"); renderMenu(); return; }
+
+    const lesson = allLessons[nextId];
+    currentLessonId = nextId;
+
+    if (lesson.type === "quiz") {
+        startQuiz(nextId);
+    } else if (lesson.type === "memo") {
+        openMemo(nextId);
+    } else if (lesson.type === "glossary") {
+        openGlossary(nextId);
+    } else {
+        currentSlide = 0;
+        slides = lesson.slides;
+        lessonTitleEl.textContent = lesson.title;
+        showScreen("lesson");
+        markVisited(0);
+        renderSlide();
+    }
+    window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 /* ===== ПАМЯТКА ===== */
@@ -595,6 +647,10 @@ function renderMemo(lesson) {
     const cols = getMemoCols(count);
     memoGridEl.className = "memo-grid cols-" + cols;
 
+    // Удаляем старую навигацию
+    const oldNav = memoGridEl.parentNode.querySelector(".memo-nav-row");
+    if (oldNav) oldNav.remove();
+
     let html = "";
     cells.forEach(cell => {
         html += `<div class="memo-cell">`;
@@ -620,6 +676,19 @@ function renderMemo(lesson) {
             </div>`;
         });
     });
+
+    // Навигация
+    let navHtml = `<div class="memo-nav-row">`;
+    const nextId = getNextLessonId(currentLessonId);
+    if (nextId) {
+        const nextTitle = escapeHtml(allLessons[nextId].title || "далее");
+        navHtml += `<button class="btn btn-outline" onclick="exitToMenu()">Завершить блок</button>`;
+        navHtml += `<button class="btn btn-primary" onclick="goToNextLesson()">${nextTitle} →</button>`;
+    } else {
+        navHtml += `<button class="btn btn-primary" onclick="exitToMenu()">← В меню</button>`;
+    }
+    navHtml += `</div>`;
+    memoGridEl.insertAdjacentHTML("afterend", navHtml);
 }
 
 /* ===== ГЛОССАРИЙ ===== */
@@ -723,6 +792,19 @@ function renderGlossaryTerm(lesson) {
     html += `<div class="slide-content">`;
     html += renderContentBlocks(term.content);
     html += `</div>`;
+
+    // Навигация
+    html += `<div class="glossary-nav-row">`;
+    const nextId = getNextLessonId(currentLessonId);
+    if (nextId) {
+        const nextTitle = escapeHtml(allLessons[nextId].title || "далее");
+        html += `<button class="btn btn-outline" onclick="exitToMenu()">Завершить блок</button>`;
+        html += `<button class="btn btn-primary" onclick="goToNextLesson()">${nextTitle} →</button>`;
+    } else {
+        html += `<button class="btn btn-primary" onclick="exitToMenu()">← В меню</button>`;
+    }
+    html += `</div>`;
+
     glossaryContentEl.innerHTML = html;
 
     glossaryContentEl.querySelectorAll('.slide-media img, .slide-media video').forEach(el => {
@@ -801,6 +883,7 @@ function startQuiz(id) {
     quizTitleEl.textContent = lesson.title;
     showScreen("quiz"); startQuizTimer(); renderQuiz();
 }
+
 function makeFreshQuestionState(q) {
     const base = { done: false, wrong: false, selected: [], lastCheckWrong: false };
     if (q.type === "match") {
@@ -1273,8 +1356,15 @@ function renderQuizResult(lesson, qs) {
     html += `<p class="note">правильно (${percent}%)</p>`;
     html += `<p class="time">Время: ${formatTime(qs.timerSeconds || 0)}</p>`;
     html += `<div class="quiz-result-actions">`;
-    html += `<button class="btn btn-primary" onclick="quizRestart()">Пройти заново</button>`;
-    html += `<button class="btn btn-text" onclick="exitToMenu()">← В меню</button>`;
+    html += `<button class="btn btn-outline" onclick="quizRestart()">Пройти заново</button>`;
+    html += `<button class="btn btn-outline" onclick="exitToMenu()">Завершить блок</button>`;
+    const nextId = getNextLessonId(currentLessonId);
+    if (nextId) {
+        const nextTitle = escapeHtml(allLessons[nextId].title || "далее");
+        html += `<button class="btn btn-primary" onclick="goToNextLesson()">${nextTitle} →</button>`;
+    } else {
+        html += `<button class="btn btn-primary" onclick="exitToMenu()">← В меню</button>`;
+    }
     html += `</div></div>`;
 
     if (hasGroups) {

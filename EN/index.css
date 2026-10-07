@@ -1747,3 +1747,39 @@ h1, h2, h3 { font-weight: 700; letter-spacing: 0.02em; }
         max-height: 320px;
     }
 }
+/* ===== Навигация «Следующий модуль» ===== */
+.nav-row-right {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.nav-row-right .nav-btn {
+    padding: 12px 24px;
+}
+
+/* В памятке и глоссарии */
+.memo-nav-row,
+.glossary-nav-row {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    flex-wrap: wrap;
+}
+
+@media (max-width: 600px) {
+    .nav-row-right,
+    .memo-nav-row,
+    .glossary-nav-row {
+        flex-direction: column-reverse;
+        width: 100%;
+    }
+    .nav-row-right .nav-btn,
+    .memo-nav-row .btn,
+    .glossary-nav-row .btn {
+        width: 100%;
+        justify-content: center;
+    }
+}
