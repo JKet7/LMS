@@ -219,6 +219,16 @@ const allLessons = {
                                 ""
                             ]
                         ]
+                    },
+                    {
+                        "type": "image",
+                        "src": "images/2.jpeg",
+                        "alt": ""
+                    },
+                    {
+                        "type": "image",
+                        "src": "images/3.png",
+                        "alt": ""
                     }
                 ]
             }
