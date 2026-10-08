@@ -647,7 +647,6 @@ function renderMemo(lesson) {
     const cols = getMemoCols(count);
     memoGridEl.className = "memo-grid cols-" + cols;
 
-    // Удаляем старую навигацию
     const oldNav = memoGridEl.parentNode.querySelector(".memo-nav-row");
     if (oldNav) oldNav.remove();
 
@@ -677,7 +676,6 @@ function renderMemo(lesson) {
         });
     });
 
-    // Навигация
     let navHtml = `<div class="memo-nav-row">`;
     const nextId = getNextLessonId(currentLessonId);
     if (nextId) {
@@ -793,7 +791,6 @@ function renderGlossaryTerm(lesson) {
     html += renderContentBlocks(term.content);
     html += `</div>`;
 
-    // Навигация
     html += `<div class="glossary-nav-row">`;
     const nextId = getNextLessonId(currentLessonId);
     if (nextId) {
@@ -840,14 +837,24 @@ function startQuiz(id) {
     currentLessonId = id;
     const qs = getQuizState(id);
 
+    // Если количество вопросов изменилось — сбрасываем всё состояние
     if (qs.questionState.length !== lesson.questions.length) {
         qs.questionState = lesson.questions.map(q => makeFreshQuestionState(q));
-        qs.currentQuestion = 0; qs.score = 0; qs.timerSeconds = 0; qs.completed = false;
+        qs.currentQuestion = 0;
+        qs.score = 0;
+        qs.timerSeconds = 0;
+        qs.completed = false;
         qs._questionsOrder = null;
         qs._optionsOrder = null;
         qs._matchOrder = null;
     }
-    qs.questionState.forEach(s => {
+
+    // Восстановление полей questionState (на случай старых данных)
+    qs.questionState.forEach((s, i) => {
+        if (!s) {
+            qs.questionState[i] = makeFreshQuestionState(lesson.questions[i]);
+            return;
+        }
         if (!s.selected) s.selected = [];
         if (s.lastCheckWrong === undefined) s.lastCheckWrong = false;
         if (s.matchedPairs === undefined) s.matchedPairs = [];
@@ -855,13 +862,41 @@ function startQuiz(id) {
         if (s.userAnswer === undefined) s.userAnswer = null;
     });
 
-    if (!qs._questionsOrder || qs._questionsOrder.length !== lesson.questions.length) {
+    // ===== _questionsOrder =====
+    let needQOrder = !qs._questionsOrder || qs._questionsOrder.length !== lesson.questions.length;
+    if (!needQOrder) {
+        for (const idx of qs._questionsOrder) {
+            if (idx < 0 || idx >= lesson.questions.length) { needQOrder = true; break; }
+        }
+    }
+    if (needQOrder) {
         let order = lesson.questions.map((_, i) => i);
         if (lesson.randomizeQuestions) order = shuffle(order);
         qs._questionsOrder = order;
     }
 
-    if (!qs._optionsOrder || qs._optionsOrder.length !== lesson.questions.length) {
+    // ===== _optionsOrder =====
+    let needOptOrder = !qs._optionsOrder || qs._optionsOrder.length !== lesson.questions.length;
+    if (!needOptOrder) {
+        for (let i = 0; i < lesson.questions.length; i++) {
+            const q = lesson.questions[i];
+            const order = qs._optionsOrder[i];
+            if (q.type === "single" || q.type === "multi") {
+                const optCount = (q.options || []).length;
+                if (!order || !Array.isArray(order) || order.length !== optCount) {
+                    needOptOrder = true;
+                    break;
+                }
+                for (const idx of order) {
+                    if (idx < 0 || idx >= optCount) { needOptOrder = true; break; }
+                }
+                if (needOptOrder) break;
+            } else {
+                if (order !== null) { needOptOrder = true; break; }
+            }
+        }
+    }
+    if (needOptOrder) {
         qs._optionsOrder = lesson.questions.map(q => {
             if (q.type !== "single" && q.type !== "multi") return null;
             let idxs = (q.options || []).map((_, i) => i);
@@ -870,7 +905,36 @@ function startQuiz(id) {
         });
     }
 
-    if (!qs._matchOrder || qs._matchOrder.length !== lesson.questions.length) {
+    // ===== _matchOrder =====
+    let needMatchOrder = !qs._matchOrder || qs._matchOrder.length !== lesson.questions.length;
+    if (!needMatchOrder) {
+        for (let i = 0; i < lesson.questions.length; i++) {
+            const q = lesson.questions[i];
+            const order = qs._matchOrder[i];
+            if (q.type === "match") {
+                const pairsCount = (q.pairs || []).length;
+                if (!order
+                    || !order.leftOrder || !order.rightOrder
+                    || !Array.isArray(order.leftOrder) || !Array.isArray(order.rightOrder)
+                    || order.leftOrder.length !== pairsCount
+                    || order.rightOrder.length !== pairsCount) {
+                    needMatchOrder = true;
+                    break;
+                }
+                for (const idx of order.leftOrder) {
+                    if (idx < 0 || idx >= pairsCount) { needMatchOrder = true; break; }
+                }
+                if (needMatchOrder) break;
+                for (const idx of order.rightOrder) {
+                    if (idx < 0 || idx >= pairsCount) { needMatchOrder = true; break; }
+                }
+                if (needMatchOrder) break;
+            } else {
+                if (order !== null) { needMatchOrder = true; break; }
+            }
+        }
+    }
+    if (needMatchOrder) {
         qs._matchOrder = lesson.questions.map(q => {
             if (q.type !== "match") return null;
             const n = (q.pairs || []).length;
@@ -881,7 +945,9 @@ function startQuiz(id) {
     }
 
     quizTitleEl.textContent = lesson.title;
-    showScreen("quiz"); startQuizTimer(); renderQuiz();
+    showScreen("quiz");
+    startQuizTimer();
+    renderQuiz();
 }
 
 function makeFreshQuestionState(q) {
@@ -996,8 +1062,22 @@ function renderChoiceQuestion(lesson, q, state, origIdx, qs) {
 }
 
 function renderMatchQuestion(lesson, q, state, origIdx, qs) {
-    const order = qs._matchOrder[origIdx];
+    let order = qs._matchOrder[origIdx];
     const total = (q.pairs || []).length;
+
+    // Защита: если order сломан — пересобираем на месте
+    if (!order
+        || !order.leftOrder || !order.rightOrder
+        || !Array.isArray(order.leftOrder) || !Array.isArray(order.rightOrder)
+        || order.leftOrder.length !== total
+        || order.rightOrder.length !== total) {
+        const leftOrder = shuffle([...Array(total).keys()]);
+        const rightOrder = shuffle([...Array(total).keys()]);
+        order = { leftOrder, rightOrder };
+        qs._matchOrder[origIdx] = order;
+        saveAll();
+    }
+
     const matchedCount = state.matchedPairs.length;
     const allMatched = matchedCount === total;
 
@@ -1131,6 +1211,7 @@ function checkMatchPair(leftIdx, rightIdx) {
 function flashMatchWrong(leftIdx, rightIdx) {
     const qs = getQuizState(currentLessonId);
     const order = qs._matchOrder[qs._questionsOrder[qs.currentQuestion]];
+    if (!order || !order.leftOrder || !order.rightOrder) { renderQuiz(); return; }
     const leftPos = order.leftOrder.indexOf(leftIdx);
     const rightPos = order.rightOrder.indexOf(rightIdx);
     const cols = quizContent.querySelectorAll(".match-col");

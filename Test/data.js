@@ -219,16 +219,6 @@ const allLessons = {
                                 ""
                             ]
                         ]
-                    },
-                    {
-                        "type": "image",
-                        "src": "images/2.jpeg",
-                        "alt": ""
-                    },
-                    {
-                        "type": "image",
-                        "src": "images/3.png",
-                        "alt": ""
                     }
                 ]
             }
@@ -277,79 +267,43 @@ const allLessons = {
                 "group": "1"
             },
             {
-                "type": "match",
-                "text": "Соедини пары",
-                "pairs": [
-                    {
-                        "left": "Слово 1",
-                        "right": "Перевод 1"
-                    },
-                    {
-                        "left": "Слово 2",
-                        "right": "Перевод 2"
-                    },
-                    {
-                        "left": "Слово 3",
-                        "right": "Перевод 3"
-                    },
-                    {
-                        "left": "4",
-                        "right": "4"
-                    },
-                    {
-                        "left": "5",
-                        "right": "5"
-                    },
-                    {
-                        "left": "6",
-                        "right": "6"
-                    },
-                    {
-                        "left": "7",
-                        "right": "7"
-                    },
-                    {
-                        "left": "8",
-                        "right": "8"
-                    },
-                    {
-                        "left": "9",
-                        "right": "9"
-                    },
-                    {
-                        "left": "10",
-                        "right": "10"
-                    },
-                    {
-                        "left": "11",
-                        "right": "11"
-                    },
-                    {
-                        "left": "12",
-                        "right": "12"
-                    },
-                    {
-                        "left": "13",
-                        "right": "13"
-                    },
-                    {
-                        "left": "14",
-                        "right": "14"
-                    },
-                    {
-                        "left": "15",
-                        "right": "15"
-                    }
-                ],
-                "explain": "",
-                "group": "1"
-            },
-            {
                 "type": "card",
                 "front": "nature",
                 "frontImage": "images/1.png",
                 "back": "природа",
                 "backImage": "",
+                "group": "1"
+            },
+            {
+                "type": "card",
+                "front": "nature",
+                "frontImage": "",
+                "back": "природа",
+                "backImage": "",
+                "group": "1"
+            },
+            {
+                "type": "match",
+                "text": "Соедини пары (копия)",
+                "pairs": [
+                    {
+                        "left": "1",
+                        "right": "1"
+                    },
+                    {
+                        "left": "2",
+                        "right": "2"
+                    },
+                    {
+                        "left": "3",
+                        "right": "3"
+                    },
+                    {
+                        "left": "4",
+                        "right": "4"
+                    }
+                ],
+                "explain": "",
                 "group": "1"
             }
         ]
