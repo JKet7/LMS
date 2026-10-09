@@ -269,50 +269,82 @@ function renderMenu() {
             ? (state.questionState || []).some(q => q && q.done)
             : (isMemo || isGlossary ? false : (state.visited || []).length > 0);
 
-        let cls = "menu-item " + (isQuiz ? "quiz" : (isMemo ? "memo" : (isGlossary ? "glossary" : "theory")));
-        const badge = isQuiz
-            ? `<span class="menu-type-badge quiz">Тест</span>`
-            : (isMemo ? `<span class="menu-type-badge memo">Памятка</span>`
-                : (isGlossary ? `<span class="menu-type-badge glossary">Глоссарий</span>`
-                    : `<span class="menu-type-badge theory">Теория</span>`));
-        const icon = isQuiz ? "🧪 " : (isMemo ? "📌 " : (isGlossary ? "📖 " : "📖 "));
+        const typeLabel = isQuiz ? "Тест"
+            : isMemo ? "Памятка"
+            : isGlossary ? "Глоссарий"
+            : "Теория";
+        const badgeClass = isQuiz ? "quiz"
+            : isMemo ? "memo"
+            : isGlossary ? "glossary"
+            : "theory";
+        const cls = "menu-item " + badgeClass;
 
-        html += `<div class="${cls}"><div class="menu-info">`;
-        html += `<h3>${icon}${lesson.title} ${badge}</h3>`;
-        if (isQuiz) html += `<p>${lesson.questions.length} вопросов</p>`;
+        let count = "";
+        if (isQuiz) count = `${lesson.questions.length} ${pluralizeQuestions(lesson.questions.length)}`;
         else if (isMemo) {
-            const cellCount = (lesson.cells || []).length;
-            html += `<p>${cellCount} ${pluralizeCells(cellCount)}</p>`;
-        }
-        else if (isGlossary) {
-            const termsCount = (lesson.terms || []).length;
-            html += `<p>${termsCount} ${pluralizeTerms(termsCount)}</p>`;
-        }
-        else html += `<p>${lesson.slides.length} слайдов</p>`;
-        html += `</div><div class="menu-actions">`;
-
-        if (isMemo) {
-            html += `<button class="btn btn-primary" onclick="openMemo('${id}')">Открыть</button>`;
+            const n = (lesson.cells || []).length;
+            count = `${n} ${pluralizeCells(n)}`;
         } else if (isGlossary) {
-            html += `<button class="btn btn-primary" onclick="openGlossary('${id}')">Открыть</button>`;
+            const n = (lesson.terms || []).length;
+            count = `${n} ${pluralizeTerms(n)}`;
+        } else {
+            count = `${lesson.slides.length} ${pluralizeSlides(lesson.slides.length)}`;
+        }
+
+        let actionsHtml = "";
+        if (isMemo) {
+            actionsHtml += `<button class="btn btn-primary" onclick="event.stopPropagation(); openMemo('${id}')">Открыть</button>`;
+        } else if (isGlossary) {
+            actionsHtml += `<button class="btn btn-primary" onclick="event.stopPropagation(); openGlossary('${id}')">Открыть</button>`;
         } else if (isQuiz) {
             if (started) {
-                html += `<button class="btn btn-primary" onclick="startQuiz('${id}')">Продолжить</button>`;
-                html += `<button class="btn btn-text" onclick="resetBlock('${id}')">Сначала</button>`;
+                actionsHtml += `<button class="btn btn-primary" onclick="event.stopPropagation(); startQuiz('${id}')">Продолжить</button>`;
+                actionsHtml += `<button class="btn btn-text" onclick="event.stopPropagation(); resetBlock('${id}')">Сначала</button>`;
             } else {
-                html += `<button class="btn btn-primary" onclick="startQuiz('${id}')">Начать</button>`;
+                actionsHtml += `<button class="btn btn-primary" onclick="event.stopPropagation(); startQuiz('${id}')">Начать</button>`;
             }
         } else {
             if (started) {
-                html += `<button class="btn btn-primary" onclick="continueLesson('${id}')">Продолжить</button>`;
-                html += `<button class="btn btn-text" onclick="resetBlock('${id}')">Сначала</button>`;
+                actionsHtml += `<button class="btn btn-primary" onclick="event.stopPropagation(); continueLesson('${id}')">Продолжить</button>`;
+                actionsHtml += `<button class="btn btn-text" onclick="event.stopPropagation(); resetBlock('${id}')">Сначала</button>`;
             } else {
-                html += `<button class="btn btn-primary" onclick="startLesson('${id}')">Начать</button>`;
+                actionsHtml += `<button class="btn btn-primary" onclick="event.stopPropagation(); startLesson('${id}')">Начать</button>`;
             }
         }
-        html += `</div></div>`;
+
+        // Клик по всей карточке — то же действие, что и основная кнопка
+        let cardOnClick = "";
+        if (isMemo) cardOnClick = `onclick="openMemo('${id}')"`;
+        else if (isGlossary) cardOnClick = `onclick="openGlossary('${id}')"`;
+        else if (isQuiz) cardOnClick = started ? `onclick="startQuiz('${id}')"` : `onclick="startQuiz('${id}')"`;
+        else cardOnClick = started ? `onclick="continueLesson('${id}')"` : `onclick="startLesson('${id}')"`;
+
+        html += `<div class="${cls}" ${cardOnClick}>`;
+        html += `<div class="menu-info">`;
+        html += `<h3>${lesson.title}</h3>`;
+        html += `<span class="menu-type-badge ${badgeClass}">${typeLabel}</span>`;
+        html += `<p>${count}</p>`;
+        html += `</div>`;
+        html += `<div class="menu-actions">${actionsHtml}</div>`;
+        html += `</div>`;
     }
     menuList.innerHTML = html;
+}
+
+function pluralizeSlides(n) {
+    const mod10 = n % 10;
+    const mod100 = n % 100;
+    if (mod10 === 1 && mod100 !== 11) return "слайд";
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return "слайда";
+    return "слайдов";
+}
+
+function pluralizeQuestions(n) {
+    const mod10 = n % 10;
+    const mod100 = n % 100;
+    if (mod10 === 1 && mod100 !== 11) return "вопрос";
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return "вопроса";
+    return "вопросов";
 }
 
 function pluralizeCells(n) {
@@ -500,10 +532,87 @@ function escapeHtml(s) {
     }[c]));
 }
 function renderLinkBlock(b) {
-    const href = b.href || ""; const text = b.text || "Ссылка";
-    const isInternal = href.startsWith("#");
-    if (isInternal) return `<div class="link-block"><a class="slide-link internal" href="javascript:void(0)" onclick="goToInternalLink('${href}')">🔗 ${text}</a></div>`;
-    return `<div class="link-block"><a class="slide-link" href="${href}" target="_blank" rel="noopener">🔗 ${text}</a></div>`;
+    const href = b.href || "";
+    const text = b.text || "Ссылка";
+
+    // Внутренние ссылки — как раньше
+    if (href.startsWith("#")) {
+        return `<div class="link-block"><a class="slide-link internal" href="javascript:void(0)" onclick="goToInternalLink('${href}')">🔗 ${escapeHtml(text)}</a></div>`;
+    }
+
+    // Внешние — пытаемся сделать превью
+    const preview = getLinkPreview(href, text);
+    if (preview) return preview;
+
+    // Fallback — иконка + домен
+    const domain = getDomain(href);
+    return `<div class="link-block">
+        <a class="slide-link link-with-domain" href="${escapeHtml(href)}" target="_blank" rel="noopener">
+            <span class="link-icon">🔗</span>
+            <span class="link-text-main">${escapeHtml(text)}</span>
+            <span class="link-domain">${escapeHtml(domain)}</span>
+        </a>
+    </div>`;
+}
+
+function getDomain(url) {
+    try {
+        const u = new URL(url);
+        return u.hostname.replace(/^www\./, "");
+    } catch (e) {
+        return "";
+    }
+}
+
+function getLinkPreview(href, text) {
+    const url = String(href || "").trim();
+    const label = escapeHtml(text);
+
+    // === YouTube ===
+    // youtube.com/watch?v=ID  |  youtu.be/ID  |  youtube.com/embed/ID  |  youtube.com/shorts/ID
+    let ytId = null;
+    let m;
+    if ((m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([A-Za-z0-9_-]{11})/))) {
+        ytId = m[1];
+    }
+    if (ytId) {
+        const thumb = `https://img.youtube.com/vi/${ytId}/hqdefault.jpg`;
+        return `<div class="link-block link-preview">
+            <a class="link-preview-card" href="${escapeHtml(url)}" target="_blank" rel="noopener">
+                <div class="link-preview-thumb">
+                    <img src="${thumb}" alt="" loading="lazy">
+                    <div class="link-preview-play">▶</div>
+                </div>
+                <div class="link-preview-info">
+                    <div class="link-preview-title">${label}</div>
+                    <div class="link-preview-domain">youtube.com</div>
+                </div>
+            </a>
+        </div>`;
+    }
+
+    // === VK Video ===
+    // vkvideo.ru/video-XXXXX_YYYYY  |  vk.com/video-XXXXX_YYYYY  |  vkvideo.ru/playlist/... (не поддерживаем)
+    if ((m = url.match(/(?:vkvideo\.ru|vk\.com)\/video(-?\d+)_(\d+)/))) {
+        const oid = m[1];
+        const vid = m[2];
+        // VK даёт превью через img.youtube... нет, у VK свой. Пробуем через vk.com/og
+        // Но без API превью не получить. Fallback — стильная карточка с иконкой.
+        return `<div class="link-block link-preview">
+            <a class="link-preview-card link-preview-vk" href="${escapeHtml(url)}" target="_blank" rel="noopener">
+                <div class="link-preview-thumb link-preview-thumb-vk">
+                    <div class="link-preview-vk-icon">📺</div>
+                    <div class="link-preview-play">▶</div>
+                </div>
+                <div class="link-preview-info">
+                    <div class="link-preview-title">${label}</div>
+                    <div class="link-preview-domain">vkvideo.ru</div>
+                </div>
+            </a>
+        </div>`;
+    }
+
+    return null;
 }
 function goToInternalLink(href) {
     const raw = href.slice(1); const parts = raw.split(":");
@@ -831,13 +940,101 @@ function glossarySelect(origIndex) {
     window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
+/* ============================================================
+   ЭКСПОРТ ГЛОССАРИЯ В CSV
+   ============================================================ */
+
+// Превращает массив блоков термина в текст
+function termContentToText(blocks) {
+    const lines = [];
+    (blocks || []).forEach(b => {
+        if (b.type === "p" || b.type === "h3") {
+            const txt = stripHtml(b.text || "").trim();
+            if (txt) lines.push(txt);
+        } else if (b.type === "quote") {
+            const txt = stripHtml(b.text || "").trim();
+            if (txt) lines.push(txt);
+        } else if (b.type === "ul") {
+            (b.items || []).forEach(item => {
+                const txt = (typeof item === "string") ? item : (item.text || "");
+                const clean = stripHtml(txt).trim();
+                if (clean) lines.push("• " + clean);
+            });
+        } else if (b.type === "link") {
+            const txt = stripHtml(b.text || "Ссылка").trim();
+            const href = b.href || "";
+            if (href) lines.push(txt + " → " + href);
+            else lines.push(txt);
+        }
+        // Картинки и видео игнорируем — они не влезут во флеш-карты
+    });
+    return lines.join("\n");
+}
+
+// Удаляет HTML-теги из строки
+function stripHtml(html) {
+    if (!html) return "";
+    let s = String(html);
+    s = s.replace(/<br\s*\/?>/gi, "\n");
+    s = s.replace(/<\/(p|div|h[1-6]|li)>/gi, "\n");
+    s = s.replace(/<[^>]+>/g, "");
+    s = s.replace(/&nbsp;/g, " ");
+    s = s.replace(/&amp;/g, "&");
+    s = s.replace(/&lt;/g, "<");
+    s = s.replace(/&gt;/g, ">");
+    s = s.replace(/&quot;/g, '"');
+    s = s.replace(/&#39;/g, "'");
+    s = s.replace(/\n{2,}/g, "\n");
+    return s;
+}
+
+// Экранирует ячейку для CSV (разделитель ;)
+function csvEscape(value) {
+    const s = String(value == null ? "" : value);
+    if (s.includes(";") || s.includes('"') || s.includes("\n") || s.includes("\r")) {
+        return '"' + s.replace(/"/g, '""') + '"';
+    }
+    return s;
+}
+
+function exportGlossaryCsv() {
+    const lesson = allLessons[currentLessonId];
+    if (!lesson || lesson.type !== "glossary") {
+        alert("Экспорт доступен только для глоссария.");
+        return;
+    }
+    const terms = lesson.terms || [];
+    if (terms.length === 0) {
+        alert("В глоссарии нет терминов.");
+        return;
+    }
+
+    const lines = [];
+    terms.forEach(term => {
+        const name = String(term.name || "").trim();
+        const content = termContentToText(term.content);
+        lines.push(csvEscape(name) + ";" + csvEscape(content));
+    });
+
+    // UTF-8 BOM, чтобы Excel не показывал кракозябры
+    const content = "\uFEFF" + lines.join("\r\n");
+
+    const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const safeName = (COURSE_KEY || "glossary").replace(/[^a-zA-Z0-9._-]/g, "_");
+    a.href = url;
+    a.download = safeName + "_glossary.csv";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 /* ===== ТЕСТ ===== */
 function startQuiz(id) {
     const lesson = allLessons[id];
     currentLessonId = id;
     const qs = getQuizState(id);
 
-    // Если количество вопросов изменилось — сбрасываем всё состояние
     if (qs.questionState.length !== lesson.questions.length) {
         qs.questionState = lesson.questions.map(q => makeFreshQuestionState(q));
         qs.currentQuestion = 0;
@@ -849,7 +1046,6 @@ function startQuiz(id) {
         qs._matchOrder = null;
     }
 
-    // Восстановление полей questionState (на случай старых данных)
     qs.questionState.forEach((s, i) => {
         if (!s) {
             qs.questionState[i] = makeFreshQuestionState(lesson.questions[i]);
@@ -862,7 +1058,7 @@ function startQuiz(id) {
         if (s.userAnswer === undefined) s.userAnswer = null;
     });
 
-    // ===== _questionsOrder =====
+    // _questionsOrder
     let needQOrder = !qs._questionsOrder || qs._questionsOrder.length !== lesson.questions.length;
     if (!needQOrder) {
         for (const idx of qs._questionsOrder) {
@@ -875,7 +1071,7 @@ function startQuiz(id) {
         qs._questionsOrder = order;
     }
 
-    // ===== _optionsOrder =====
+    // _optionsOrder
     let needOptOrder = !qs._optionsOrder || qs._optionsOrder.length !== lesson.questions.length;
     if (!needOptOrder) {
         for (let i = 0; i < lesson.questions.length; i++) {
@@ -905,7 +1101,7 @@ function startQuiz(id) {
         });
     }
 
-    // ===== _matchOrder =====
+    // _matchOrder
     let needMatchOrder = !qs._matchOrder || qs._matchOrder.length !== lesson.questions.length;
     if (!needMatchOrder) {
         for (let i = 0; i < lesson.questions.length; i++) {
@@ -1065,7 +1261,6 @@ function renderMatchQuestion(lesson, q, state, origIdx, qs) {
     let order = qs._matchOrder[origIdx];
     const total = (q.pairs || []).length;
 
-    // Защита: если order сломан — пересобираем на месте
     if (!order
         || !order.leftOrder || !order.rightOrder
         || !Array.isArray(order.leftOrder) || !Array.isArray(order.rightOrder)
@@ -1587,6 +1782,18 @@ function printCurrent() {
         setTimeout(() => {
             quizContent.innerHTML = backup;
         }, 100);
+    } else if (lesson.type === "glossary") {
+        // Подменяем содержимое на полный глоссарий для печати
+        const backup = glossaryContentEl.innerHTML;
+        glossaryContentEl.innerHTML = renderGlossaryForPrint(lesson);
+        // Скрываем сайдбар и список терминов
+        const sidebar = document.querySelector(".glossary-sidebar");
+        if (sidebar) sidebar.style.display = "none";
+        window.print();
+        setTimeout(() => {
+            glossaryContentEl.innerHTML = backup;
+            if (sidebar) sidebar.style.display = "";
+        }, 100);
     } else {
         window.print();
     }
@@ -1639,5 +1846,18 @@ function renderQuizForPrint(lesson) {
     html += `</div>`;
     return html;
 }
-
+function renderGlossaryForPrint(lesson) {
+    const terms = lesson.terms || [];
+    let html = `<h1 class="slide-title">${escapeHtml(lesson.title)}</h1>`;
+    terms.forEach((term, idx) => {
+        const name = String(term.name || "").trim() || "(без названия)";
+        html += `<div class="print-glossary-item">`;
+        html += `<h2 class="print-glossary-term">${escapeHtml(name)}</h2>`;
+        html += `<div class="slide-content">`;
+        html += renderContentBlocks(term.content);
+        html += `</div>`;
+        html += `</div>`;
+    });
+    return html;
+}
 renderMenu();

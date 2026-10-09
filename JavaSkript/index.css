@@ -196,6 +196,7 @@ h1, h2, h3 { font-weight: 700; letter-spacing: 0.02em; }
 .app-container.narrow {
     max-width: min(1000px, 92vw);
 }
+
 .screen { display: none; }
 .screen.active { display: flex; flex-direction: column; gap: 16px; }
 
@@ -302,48 +303,64 @@ h1, h2, h3 { font-weight: 700; letter-spacing: 0.02em; }
 .btn-icon:hover { background: var(--hover); color: var(--text); }
 .btn:disabled { opacity: .4; cursor: default; pointer-events: none; }
 
-/* ===== Меню ===== */
-.menu-list { display: flex; flex-direction: column; gap: 12px; }
+/* ===== Меню курса — сетка карточек ===== */
+.menu-list {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px;
+}
+@media (max-width: 1200px) {
+    .menu-list { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 900px) {
+    .menu-list { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 600px) {
+    .menu-list { grid-template-columns: 1fr; }
+}
+
 .menu-item {
     background: var(--card-bg);
     border: 1px solid var(--card-border);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-sm);
-    padding: 24px 28px;
+    padding: 20px 22px 18px;
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 20px;
-    flex-wrap: wrap;
-    transition: box-shadow .2s;
-    border-left: 6px solid var(--card-border);
+    flex-direction: column;
+    gap: 0;
+    transition: box-shadow .2s, border-color .2s, transform .15s;
+    border-top: 4px solid var(--card-border);
+    cursor: pointer;
+    position: relative;
+    min-height: 180px;
 }
-.menu-item:hover { box-shadow: var(--shadow-md); }
-.menu-item.theory { border-left-color: var(--secondary); }
-.menu-item.quiz { border-left-color: var(--primary); }
-.menu-item.memo { border-left-color: var(--memo-accent); }
-.menu-item.glossary { border-left-color: var(--memo-accent); }
+.menu-item:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
+}
+.menu-item.theory { border-top-color: var(--secondary); }
+.menu-item.quiz { border-top-color: var(--primary); }
+.menu-item.memo { border-top-color: var(--memo-accent); }
+.menu-item.glossary { border-top-color: var(--memo-accent); }
 
-.menu-info { flex: 1; min-width: 200px; }
+.menu-info { min-width: 0; }
 .menu-info h3 {
-    margin: 0 0 6px;
-    font-size: 18px;
+    margin: 0 0 10px;
+    font-size: 17px;
     font-weight: 700;
     color: var(--text-strong);
-    display: flex;
-    align-items: center;
-    gap: 10px;
     line-height: 1.3;
+    word-break: break-word;
 }
 .menu-info p {
-    margin: 0;
+    margin: 10px 0 0;
     font-size: 13px;
     color: var(--text-muted);
     line-height: 1.5;
 }
 .menu-type-badge {
     display: inline-block;
-    padding: 3px 10px;
+    padding: 4px 12px;
     font-size: 11px;
     font-weight: 700;
     border-radius: 100px;
@@ -358,15 +375,18 @@ h1, h2, h3 { font-weight: 700; letter-spacing: 0.02em; }
     background: var(--primary-soft);
     color: var(--primary);
 }
-.menu-type-badge.memo {
-    background: var(--memo-accent-soft);
-    color: var(--memo-accent);
-}
+.menu-type-badge.memo,
 .menu-type-badge.glossary {
     background: var(--memo-accent-soft);
     color: var(--memo-accent);
 }
-.menu-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.menu-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: auto;
+    padding-top: 16px;
+}
 
 /* ===== Прогресс ===== */
 .progress-bar {
@@ -531,11 +551,8 @@ h1, h2, h3 { font-weight: 700; letter-spacing: 0.02em; }
     flex: 1;
     min-width: 0;
 }
-
 .slide-list-number .slide-list-marker { font-weight: 700; }
-.slide-list-checkbox .slide-list-text {
-    padding-left: 4px;
-}
+.slide-list-checkbox .slide-list-text { padding-left: 4px; }
 
 @media (max-width: 600px) {
     .slide-list-item.level-1 { margin-left: 18px; }
@@ -664,6 +681,43 @@ h1, h2, h3 { font-weight: 700; letter-spacing: 0.02em; }
 .nav-btn:disabled { opacity: .35; cursor: default; }
 .nav-btn.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
 .nav-btn.primary:hover:not(:disabled) { background: var(--primary-hover); border-color: var(--primary-hover); }
+
+/* «Завершить блок» + «<Название> →» */
+.nav-row-right {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.nav-row-right .nav-btn {
+    padding: 12px 24px;
+}
+
+/* В памятке и глоссарии */
+.memo-nav-row,
+.glossary-nav-row {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    flex-wrap: wrap;
+}
+
+@media (max-width: 600px) {
+    .nav-row-right,
+    .memo-nav-row,
+    .glossary-nav-row {
+        flex-direction: column-reverse;
+        width: 100%;
+    }
+    .nav-row-right .nav-btn,
+    .memo-nav-row .btn,
+    .glossary-nav-row .btn {
+        width: 100%;
+        justify-content: center;
+    }
+}
 
 /* ===== Навигация теста ===== */
 .quiz-nav-grid {
@@ -905,7 +959,6 @@ h1, h2, h3 { font-weight: 700; letter-spacing: 0.02em; }
 @media (max-width: 600px) {
     .card-btn { width: 76px; height: 76px; font-size: 28px; }
 }
-
 .card-answer-label {
     text-align: center;
     color: var(--text-muted);
@@ -1119,7 +1172,7 @@ h1, h2, h3 { font-weight: 700; letter-spacing: 0.02em; }
 .memo-grid {
     display: grid;
     gap: 20px;
-    align-items: start;
+    align-items: stretch;
 }
 .memo-grid.cols-1 { grid-template-columns: 1fr; }
 .memo-grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
@@ -1135,6 +1188,7 @@ h1, h2, h3 { font-weight: 700; letter-spacing: 0.02em; }
     transition: box-shadow .2s;
     display: flex;
     flex-direction: column;
+    height: 100%;
 }
 .memo-cell:hover { box-shadow: var(--shadow-md); }
 
@@ -1336,6 +1390,20 @@ h1, h2, h3 { font-weight: 700; letter-spacing: 0.02em; }
     color: var(--card-face-text);
     display: inline-block;
     min-width: 200px;
+}
+
+/* Глоссарий в печати */
+.print-glossary-item {
+    margin-bottom: 32px;
+    page-break-inside: avoid;
+}
+.print-glossary-term {
+    font-size: 16pt;
+    font-weight: 700;
+    color: #000 !important;
+    margin: 0 0 8px;
+    padding-bottom: 4px;
+    border-bottom: 2px solid #000;
 }
 
 @media print {
@@ -1540,6 +1608,14 @@ h1, h2, h3 { font-weight: 700; letter-spacing: 0.02em; }
         font-weight: 700 !important;
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
+    }
+
+    /* Скрываем сайдбар глоссария в печати */
+    .glossary-sidebar {
+        display: none !important;
+    }
+    .glossary-layout {
+        display: block !important;
     }
 }
 
@@ -1747,39 +1823,117 @@ h1, h2, h3 { font-weight: 700; letter-spacing: 0.02em; }
         max-height: 320px;
     }
 }
-/* ===== Навигация «Следующий модуль» ===== */
-.nav-row-right {
+/* ===== Превью ссылок ===== */
+.link-block { margin: 20px 0; }
+
+.link-preview-card {
     display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 16px;
+    padding: 12px;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    text-decoration: none;
+    color: inherit;
+    transition: all .2s;
+    max-width: 520px;
 }
-.nav-row-right .nav-btn {
-    padding: 12px 24px;
+.link-preview-card:hover {
+    border-color: var(--primary);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
+}
+.link-preview-thumb {
+    position: relative;
+    width: 160px;
+    height: 90px;
+    flex-shrink: 0;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    background: var(--media-bg);
+}
+.link-preview-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+.link-preview-play {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, .3);
+    color: #fff;
+    font-size: 24px;
+    transition: background .2s;
+}
+.link-preview-card:hover .link-preview-play {
+    background: rgba(0, 0, 0, .5);
 }
 
-/* В памятке и глоссарии */
-.memo-nav-row,
-.glossary-nav-row {
+/* ВК без превью — просто тёмный блок */
+.link-preview-thumb-vk {
+    background: var(--secondary);
     display: flex;
-    gap: 12px;
-    justify-content: flex-end;
-    margin-top: 24px;
-    padding-top: 20px;
-    border-top: 1px solid var(--border);
-    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+}
+.link-preview-vk-icon {
+    font-size: 40px;
+    opacity: .9;
+}
+
+.link-preview-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+}
+.link-preview-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-strong);
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.link-preview-domain {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+/* Обычные ссылки — с доменом */
+.slide-link.link-with-domain {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+}
+.slide-link.link-with-domain .link-icon {
+    font-size: 16px;
+}
+.slide-link.link-with-domain .link-text-main {
+    font-weight: 700;
+}
+.slide-link.link-with-domain .link-domain {
+    font-size: 12px;
+    opacity: .7;
+    font-weight: 400;
 }
 
 @media (max-width: 600px) {
-    .nav-row-right,
-    .memo-nav-row,
-    .glossary-nav-row {
-        flex-direction: column-reverse;
-        width: 100%;
+    .link-preview-card {
+        flex-direction: column;
+        max-width: 100%;
     }
-    .nav-row-right .nav-btn,
-    .memo-nav-row .btn,
-    .glossary-nav-row .btn {
+    .link-preview-thumb {
         width: 100%;
-        justify-content: center;
+        height: 180px;
     }
 }

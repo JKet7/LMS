@@ -238,6 +238,9 @@ function refreshAll() {
     document.getElementById("glossary-editor").style.display = "none";
     document.getElementById("term-search-wrap").style.display = "none";
 
+    const csvBtns = document.getElementById("glossary-csv-btns");
+    if (csvBtns) csvBtns.style.display = (lesson.type === "glossary") ? "flex" : "none";
+
     if (lesson.type === "quiz") {
         document.getElementById("quiz-editor").style.display = "block";
         document.getElementById("slides-card").style.display = "none";
@@ -310,6 +313,12 @@ function renderLessonList() {
         exp.title = "Экспортировать блок в файл .json";
         exp.onclick = (e) => { e.stopPropagation(); exportLesson(id); };
         row.appendChild(exp);
+
+        const dup = document.createElement("button");
+        dup.className = "icon-btn-sm"; dup.textContent = "📋";
+        dup.title = "Дублировать блок";
+        dup.onclick = (e) => { e.stopPropagation(); duplicateLesson(id); };
+        row.appendChild(dup);
 
         const up = document.createElement("button");
         up.className = "icon-btn-sm"; up.textContent = "↑";
@@ -387,6 +396,38 @@ function moveLesson(id, direction) {
     for (const k in allLessons) delete allLessons[k];
     entries.forEach(([k, v]) => { allLessons[k] = v; });
     renderLessonList(); saveDraft();
+}
+
+function duplicateLesson(id) {
+    readFromDom();
+    const original = allLessons[id];
+    if (!original) return;
+
+    const copy = JSON.parse(JSON.stringify(original));
+    copy.title = (copy.title || "Без названия") + " (копия)";
+
+    let baseKey = id + "_copy";
+    let finalKey = baseKey;
+    let n = 1;
+    while (allLessons[finalKey]) {
+        finalKey = baseKey + "_" + n;
+        n++;
+        if (n > 1000) { alert("Слишком много копий"); return; }
+    }
+
+    const entries = Object.entries(allLessons);
+    const index = entries.findIndex(([k]) => k === id);
+    entries.splice(index + 1, 0, [finalKey, copy]);
+
+    for (const k in allLessons) delete allLessons[k];
+    entries.forEach(([k, v]) => { allLessons[k] = v; });
+
+    state.currentLessonId = finalKey;
+    state.currentSlideIndex = 0;
+
+    refreshAll();
+    saveDraft();
+    setStatus("📋 Создана копия блока: " + copy.title, "ok");
 }
 
 function renderSlideList() {
@@ -547,6 +588,214 @@ function moveTermBlock(btn, dir) {
     const [it] = term.content.splice(idx, 1);
     term.content.splice(ni, 0, it);
     renderTerm(); saveDraft();
+}
+
+/* ============================================================
+   CSV ГЛОССАРИЯ — ИМПОРТ И ЭКСПОРТ
+   ============================================================ */
+
+function termContentToText(blocks) {
+    const lines = [];
+    (blocks || []).forEach(b => {
+        if (b.type === "p" || b.type === "h3") {
+            const txt = stripHtml(b.text || "").trim();
+            if (txt) lines.push(txt);
+        } else if (b.type === "quote") {
+            const txt = stripHtml(b.text || "").trim();
+            if (txt) lines.push(txt);
+        } else if (b.type === "ul") {
+            (b.items || []).forEach(item => {
+                const txt = (typeof item === "string") ? item : (item.text || "");
+                const clean = stripHtml(txt).trim();
+                if (clean) lines.push("• " + clean);
+            });
+        } else if (b.type === "link") {
+            const txt = stripHtml(b.text || "Ссылка").trim();
+            const href = b.href || "";
+            if (href) lines.push(txt + " → " + href);
+            else lines.push(txt);
+        }
+    });
+    return lines.join("\n");
+}
+
+function textToTermContent(text) {
+    if (!text) return [{ type: "p", text: "" }];
+    const lines = String(text).split(/\r?\n/);
+    const blocks = [];
+
+    lines.forEach(line => {
+        const trimmed = line.trim();
+        if (!trimmed) return;
+
+        if (/^[•\-*]\s+/.test(trimmed)) {
+            const itemText = trimmed.replace(/^[•\-*]\s+/, "");
+            const last = blocks[blocks.length - 1];
+            if (last && last.type === "ul") {
+                last.items.push({ text: itemText, level: 0 });
+            } else {
+                blocks.push({
+                    type: "ul",
+                    style: "bullet",
+                    items: [{ text: itemText, level: 0 }]
+                });
+            }
+        } else if (/^###\s+/.test(trimmed)) {
+            blocks.push({ type: "h3", text: trimmed.replace(/^#+\s+/, "") });
+        } else {
+            blocks.push({ type: "p", text: trimmed });
+        }
+    });
+
+    if (blocks.length === 0) blocks.push({ type: "p", text: "" });
+    return blocks;
+}
+
+function stripHtml(html) {
+    if (!html) return "";
+    let s = String(html);
+    s = s.replace(/<br\s*\/?>/gi, "\n");
+    s = s.replace(/<\/(p|div|h[1-6]|li)>/gi, "\n");
+    s = s.replace(/<[^>]+>/g, "");
+    s = s.replace(/&nbsp;/g, " ");
+    s = s.replace(/&amp;/g, "&");
+    s = s.replace(/&lt;/g, "<");
+    s = s.replace(/&gt;/g, ">");
+    s = s.replace(/&quot;/g, '"');
+    s = s.replace(/&#39;/g, "'");
+    s = s.replace(/\n{2,}/g, "\n");
+    return s;
+}
+
+function csvEscape(value) {
+    const s = String(value == null ? "" : value);
+    if (s.includes(";") || s.includes('"') || s.includes("\n") || s.includes("\r")) {
+        return '"' + s.replace(/"/g, '""') + '"';
+    }
+    return s;
+}
+
+function exportGlossaryCsv() {
+    readFromDom();
+    const lesson = currentLesson();
+    if (!lesson || lesson.type !== "glossary") {
+        setStatus("Экспорт доступен только для глоссария.", "err");
+        return;
+    }
+    const terms = lesson.terms || [];
+    if (terms.length === 0) {
+        setStatus("В глоссарии нет терминов.", "err");
+        return;
+    }
+
+    const lines = [];
+    terms.forEach(term => {
+        const name = String(term.name || "").trim();
+        const content = termContentToText(term.content);
+        lines.push(csvEscape(name) + ";" + csvEscape(content));
+    });
+
+    const content = "\uFEFF" + lines.join("\r\n");
+
+    const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const safeName = (COURSE_KEY || "glossary").replace(/[^a-zA-Z0-9._-]/g, "_");
+    a.href = url;
+    a.download = safeName + "_glossary.csv";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setStatus("📤 Экспортировано терминов: " + terms.length, "ok");
+}
+
+function importGlossaryCsv() {
+    const lesson = currentLesson();
+    if (!lesson || lesson.type !== "glossary") {
+        setStatus("Импорт доступен только для глоссария.", "err");
+        return;
+    }
+
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".csv,.txt,text/csv";
+    input.onchange = () => {
+        const file = input.files && input.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+            let text = String(reader.result || "");
+            if (/\uFFFD/.test(text.slice(0, 1000))) {
+                const reader2 = new FileReader();
+                reader2.onload = () => {
+                    try {
+                        processGlossaryCsv(String(reader2.result || ""), file.name);
+                    } catch (e) {
+                        processGlossaryCsv(text, file.name);
+                    }
+                };
+                reader2.readAsText(file, "windows-1251");
+            } else {
+                processGlossaryCsv(text, file.name);
+            }
+        };
+        reader.readAsText(file, "utf-8");
+    };
+    input.click();
+}
+
+function processGlossaryCsv(text, fileName) {
+    const parsed = parseCsv(text);
+    const rows = parsed.rows;
+    if (rows.length === 0) {
+        setStatus("Файл пустой.", "err");
+        return;
+    }
+
+    let startRow = 0;
+    const firstRow = rows[0] || [];
+    const firstCell = String(firstRow[0] || "").trim().toLowerCase();
+    if (firstCell === "термин" || firstCell === "term" || firstCell === "name"
+        || firstCell === "передняя сторона" || firstCell === "front") {
+        startRow = 1;
+    }
+
+    const terms = [];
+    for (let r = startRow; r < rows.length; r++) {
+        const row = rows[r];
+        if (!row || row.length === 0) continue;
+        const name = String(row[0] || "").trim();
+        if (!name) continue;
+        const contentText = String(row[1] || "").trim();
+        const content = textToTermContent(contentText);
+        terms.push({ name, content });
+    }
+
+    if (terms.length === 0) {
+        setStatus("В файле не найдено ни одного термина.", "err");
+        return;
+    }
+
+    const choice = confirm(
+        "Найдено терминов: " + terms.length + ".\n\n" +
+        "ОК — ЗАМЕНИТЬ все текущие термины.\n" +
+        "Отмена — ДОБАВИТЬ к существующим.\n\n" +
+        "(Всего в файле: " + (rows.length - startRow) + " строк)"
+    );
+
+    readFromDom();
+    if (choice) {
+        lesson.terms = terms;
+        state.currentSlideIndex = 0;
+        setStatus("📥 Импортировано (заменено): " + terms.length, "ok");
+    } else {
+        if (!lesson.terms) lesson.terms = [];
+        lesson.terms = lesson.terms.concat(terms);
+        setStatus("📥 Импортировано (добавлено): " + terms.length, "ok");
+    }
+
+    refreshAll();
+    saveDraft();
+    autoSaveToServer();
 }
 
 /* ===== РЕДАКТОР СПИСКА ===== */
@@ -1402,7 +1651,13 @@ function createBlockElement(block, index, context) {
             <div class="url-row"><span>URL:</span><input type="text" class="link-url" value="${(block.href || "").replace(/"/g, '&quot;')}" placeholder="https://... или #ключ_блока:3"></div>
             <div class="url-hint">Внешние: https://... | внутри курса: #ключ_блока или #ключ_блока:3<br>Ключ блока — серая плашка в списке блоков слева (кликни — скопируется)</div>`;
         editable.querySelector(".link-url").addEventListener("input", onFieldChange);
+        editable.querySelector(".link-text").addEventListener("input", onFieldChange);
         editable.querySelector(".link-text").addEventListener("paste", handlePaste);
+        editable.querySelector(".link-text").addEventListener("keydown", (e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+            }
+        });
     } else if (block.type === "image") {
         editable = createMediaBlock(block, "image");
     } else if (block.type === "video") {
@@ -1448,7 +1703,6 @@ function createBlockElement(block, index, context) {
     return wrapper;
 }
 
-/* ===== РЕДАКТОР МЕДИА (с загрузкой на сервер) ===== */
 function createMediaBlock(block, type) {
     const wrap = document.createElement("div");
     wrap.className = "media-editor";
@@ -1842,6 +2096,44 @@ function addSlide() {
         refreshAll(); saveDraft();
     }
 }
+
+function duplicateSlide() {
+    readFromDom();
+    const lesson = currentLesson();
+    const idx = state.currentSlideIndex;
+
+    if (lesson.type === "memo") {
+        if (!lesson.cells || !lesson.cells[idx]) return;
+        if (lesson.cells.length >= MAX_MEMO_CELLS) {
+            alert("Максимум " + MAX_MEMO_CELLS + " ячеек. Удалить что-то, чтобы дублировать.");
+            return;
+        }
+        const copy = JSON.parse(JSON.stringify(lesson.cells[idx]));
+        copy.title = (copy.title || "Без названия") + " (копия)";
+        lesson.cells.splice(idx + 1, 0, copy);
+        state.currentSlideIndex = idx + 1;
+        refreshAll(); saveDraft();
+        setStatus("📋 Ячейка скопирована", "ok");
+    } else if (lesson.type === "glossary") {
+        if (!lesson.terms || !lesson.terms[idx]) return;
+        const copy = JSON.parse(JSON.stringify(lesson.terms[idx]));
+        copy.name = (copy.name || "Без названия") + " (копия)";
+        lesson.terms.splice(idx + 1, 0, copy);
+        state.currentSlideIndex = idx + 1;
+        refreshAll(); saveDraft();
+        setStatus("📋 Термин скопирован", "ok");
+    } else {
+        if (!lesson.slides || !lesson.slides[idx]) return;
+        const copy = JSON.parse(JSON.stringify(lesson.slides[idx]));
+        copy.title = (copy.title || "Без названия") + " (копия)";
+        copy.shortName = (copy.shortName || "Без названия") + " (копия)";
+        lesson.slides.splice(idx + 1, 0, copy);
+        state.currentSlideIndex = idx + 1;
+        refreshAll(); saveDraft();
+        setStatus("📋 Слайд скопирован", "ok");
+    }
+}
+
 function deleteSlide() {
     const lesson = currentLesson();
     if (lesson.type === "memo") {
@@ -2397,7 +2689,9 @@ function removeOption(btn) {
     renderQuizEditor(lesson); saveDraft();
 }
 
-/* ===== ЧТЕНИЕ contentEditable ===== */
+/* ============================================================
+   ЧТЕНИЕ contentEditable-БЛОКОВ В ОБЪЕКТ
+   ============================================================ */
 function readEditableBlocks(containerId, blocks) {
     const container = document.getElementById(containerId);
     if (!container || !Array.isArray(blocks)) return;
@@ -2412,6 +2706,11 @@ function readEditableBlocks(containerId, blocks) {
         } else if (b.type === "quote") {
             const el = w.querySelector(".quote-text");
             if (el) b.text = sanitizeHtml(el.innerHTML);
+        } else if (b.type === "link") {
+            const textEl = w.querySelector(".link-text");
+            const urlEl = w.querySelector(".link-url");
+            if (textEl) b.text = sanitizeHtml(textEl.innerHTML);
+            if (urlEl) b.href = urlEl.value.trim();
         }
     });
 }
@@ -2470,8 +2769,10 @@ function onFieldChange() {
             else renderSlideList();
         }
         saveDraft();
-    }, 400);
+        autoSaveToServer();
+    }, 2000);
 }
+
 function onCourseSettingsChange() {
     clearTimeout(changeTimer);
     changeTimer = setTimeout(() => {
@@ -2481,6 +2782,42 @@ function onCourseSettingsChange() {
     }, 400);
 }
 function saveDraft() { try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ allLessons, courseSettings })); } catch(e){} }
+
+/* ============================================================
+   АВТОСОХРАНЕНИЕ В data.js (при запущенном сервере)
+   ============================================================ */
+let autoSaveInFlight = false;
+let autoSavePending = false;
+
+async function autoSaveToServer() {
+    if (autoSaveInFlight) {
+        autoSavePending = true;
+        return;
+    }
+    autoSaveInFlight = true;
+
+    try {
+        const content = buildDataJs();
+        const res = await fetch("/save-data", {
+            method: "POST",
+            headers: { "Content-Type": "text/javascript; charset=utf-8" },
+            body: content
+        });
+        if (!res.ok) {
+            const msg = await res.text();
+            throw new Error(msg || ("HTTP " + res.status));
+        }
+        localStorage.removeItem(DRAFT_KEY);
+    } catch (e) {
+        console.warn("Автосохранение не удалось:", e);
+    } finally {
+        autoSaveInFlight = false;
+        if (autoSavePending) {
+            autoSavePending = false;
+            autoSaveToServer();
+        }
+    }
+}
 
 function addLesson(type) {
     readFromDom();
@@ -3264,7 +3601,6 @@ function buildDataJs() {
 
 async function saveToFile() {
     const content = buildDataJs();
-
     try {
         const res = await fetch("/save-data", {
             method: "POST",
@@ -3343,9 +3679,9 @@ function openCsvTemplates() {
 
     html += `<div class="csv-samples">`;
     html += `<div class="csv-samples-title">Что в шаблоне</div>`;
-    html += `<div class="csv-samples-item"><strong>single_multi</strong> — вопросы с одним или несколькими правильными ответами. Колонки: <code>type, text, option1..4, correct, explain, group</code>.</div>`;
-    html += `<div class="csv-samples-item"><strong>match</strong> — вопросы на соответствие. До 5 пар. Колонки: <code>text, pair1_left, pair1_right, ... pair5_right, explain, group</code>.</div>`;
-    html += `<div class="csv-samples-item"><strong>card</strong> — карточки для запоминания. Колонки: <code>front, frontImage, back, backImage, group</code>.</div>`;
+    html += `<div class="csv-samples-item"><strong>single_multi</strong> — вопросы с одним или несколькими правильными ответами.</div>`;
+    html += `<div class="csv-samples-item"><strong>match</strong> — вопросы на соответствие. До 5 пар.</div>`;
+    html += `<div class="csv-samples-item"><strong>card</strong> — карточки для запоминания.</div>`;
     html += `</div>`;
 
     html += `<div class="csv-samples">`;
@@ -3353,7 +3689,7 @@ function openCsvTemplates() {
     html += `<div class="csv-samples-item">Разделитель — <strong>точка с запятой</strong> <code>;</code>.</div>`;
     html += `<div class="csv-samples-item">Для multi правильные ответы — через <code>|</code>, например <code>A|E</code>.</div>`;
     html += `<div class="csv-samples-item">Пустые ячейки — можно. Для match, если пара пустая — она не считается.</div>`;
-    html += `<div class="csv-samples-item">Кодировка: сохраняй как <strong>CSV UTF-8</strong> или как обычный CSV — мы поймём.</div>`;
+    html += `<div class="csv-samples-item">Кодировка: сохраняй как <strong>CSV UTF-8</strong>.</div>`;
     html += `</div>`;
 
     html += `<div class="csv-modal-actions">`;
@@ -3695,6 +4031,8 @@ function csvApplyImport(mode) {
     setStatus("📥 Импортировано: " + cnt + (errCnt ? " (ошибок: " + errCnt + ")" : ""), "ok");
     csvImportState = null;
     closeCsvModal();
+    saveDraft();
+    autoSaveToServer();
 }
 
 function renderCsvError(msg) {
@@ -3722,6 +4060,13 @@ document.addEventListener("keydown", e => {
         if (document.getElementById("csv-overlay").classList.contains("show")) {
             closeCsvModal();
         }
+    }
+    if (e.key === "d" && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
+        const t = e.target;
+        const inInput = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable);
+        if (inInput) return;
+        e.preventDefault();
+        if (currentLesson()) duplicateSlide();
     }
 });
 

@@ -10,8 +10,10 @@
 // memo:         { title, cells: [{ title, content: [...] }] }
 // glossary:     { title, terms: [{ name, content: [...] }] }
 // table:        { type: "table", header: bool, rows: [[...], [...]] }
+// ul:           { type: "ul", style: "bullet"|"number"|"checkbox", items: [{text, level}] }
 // randomizeQuestions / randomizeOptions — перемешивание.
 // Контент слайдов/ячеек/терминов: блоки p, h3, ul, quote, link, image, video, table.
+// В p/h3/quote допустимы <b>, <i>, <u>, <s> и style="text-align:...".
 // ============================================================
 
 const courseSettings = {
@@ -135,21 +137,25 @@ const allLessons = {
                                 "dfgdsfgsdfg"
                             ],
                             [
-                                "FFFFFFFF",
-                                "DSFDFS",
-                                "dsfgsdfg"
-                            ],
-                            [
-                                "SDFSDFSDf",
-                                "fgdfshdfghadgfgd",
-                                "dfsgsdf"
-                            ],
-                            [
-                                "dfgadfgadfg",
                                 "",
-                                "gdsfgdsfgdsf"
+                                "",
+                                ""
+                            ],
+                            [
+                                "",
+                                "",
+                                ""
+                            ],
+                            [
+                                "",
+                                "",
+                                ""
                             ]
                         ]
+                    },
+                    {
+                        "type": "p",
+                        "text": "sdmnfajfbgasljdfajsfajsdhfgjdsgfjkasdaf<br><br>"
                     }
                 ]
             }
@@ -165,17 +171,34 @@ const allLessons = {
                     {
                         "type": "ul",
                         "items": [
-                            "Первый пункт",
-                            "Второй пункт"
-                        ]
+                            {
+                                "text": "Первый пункт",
+                                "level": 0
+                            },
+                            {
+                                "text": "Второй пункт",
+                                "level": 0
+                            }
+                        ],
+                        "style": "bullet"
                     },
                     {
                         "type": "ul",
                         "items": [
-                            "Первый пункт",
-                            "Второй пункт",
-                            "Третий пункт"
-                        ]
+                            {
+                                "text": "Первый пункт",
+                                "level": 0
+                            },
+                            {
+                                "text": "Второй пункт",
+                                "level": 0
+                            },
+                            {
+                                "text": "Третий пункт",
+                                "level": 0
+                            }
+                        ],
+                        "style": "bullet"
                     }
                 ]
             },
@@ -185,9 +208,16 @@ const allLessons = {
                     {
                         "type": "ul",
                         "items": [
-                            "Первый пункт",
-                            "Второй пункт"
-                        ]
+                            {
+                                "text": "Первый пункт",
+                                "level": 0
+                            },
+                            {
+                                "text": "Второй пункт",
+                                "level": 0
+                            }
+                        ],
+                        "style": "bullet"
                     },
                     {
                         "type": "quote",
@@ -201,9 +231,16 @@ const allLessons = {
                     {
                         "type": "ul",
                         "items": [
-                            "Первый пункт",
-                            "Второй пункт"
-                        ]
+                            {
+                                "text": "Первый пункт",
+                                "level": 0
+                            },
+                            {
+                                "text": "Второй пункт",
+                                "level": 0
+                            }
+                        ],
+                        "style": "bullet"
                     },
                     {
                         "type": "image",
@@ -373,6 +410,29 @@ const allLessons = {
                     {
                         "type": "p",
                         "text": "МЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯУ"
+                    }
+                ]
+            },
+            {
+                "name": "Новый термин",
+                "content": [
+                    {
+                        "type": "p",
+                        "text": "Определение термина."
+                    },
+                    {
+                        "type": "link",
+                        "text": "ВИДЕО",
+                        "href": "https://vkvideo.ru/video-230650474_456239024"
+                    }
+                ]
+            },
+            {
+                "name": "Новый термин",
+                "content": [
+                    {
+                        "type": "p",
+                        "text": "Определение термина."
                     }
                 ]
             }

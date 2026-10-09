@@ -69,6 +69,10 @@ const allLessons = {
                         "type": "link",
                         "text": "На теорию",
                         "href": "#new_lesson:2"
+                    },
+                    {
+                        "type": "p",
+                        "text": "<div style=\"text-align:center\"><span>Новый абзац</span></div>"
                     }
                 ]
             },
@@ -219,6 +223,16 @@ const allLessons = {
                                 ""
                             ]
                         ]
+                    },
+                    {
+                        "type": "image",
+                        "src": "images/2.jpeg",
+                        "alt": ""
+                    },
+                    {
+                        "type": "image",
+                        "src": "images/3.png",
+                        "alt": ""
                     }
                 ]
             }
@@ -267,43 +281,31 @@ const allLessons = {
                 "group": "1"
             },
             {
+                "type": "match",
+                "text": "Соедини пары",
+                "pairs": [
+                    {
+                        "left": "Слово 1",
+                        "right": "Перевод 1"
+                    },
+                    {
+                        "left": "Слово 2",
+                        "right": "Перевод 2"
+                    },
+                    {
+                        "left": "Слово 3",
+                        "right": "Перевод 3"
+                    }
+                ],
+                "explain": "",
+                "group": "1"
+            },
+            {
                 "type": "card",
                 "front": "nature",
                 "frontImage": "images/1.png",
                 "back": "природа",
                 "backImage": "",
-                "group": "1"
-            },
-            {
-                "type": "card",
-                "front": "nature",
-                "frontImage": "",
-                "back": "природа",
-                "backImage": "",
-                "group": "1"
-            },
-            {
-                "type": "match",
-                "text": "Соедини пары (копия)",
-                "pairs": [
-                    {
-                        "left": "1",
-                        "right": "1"
-                    },
-                    {
-                        "left": "2",
-                        "right": "2"
-                    },
-                    {
-                        "left": "3",
-                        "right": "3"
-                    },
-                    {
-                        "left": "4",
-                        "right": "4"
-                    }
-                ],
-                "explain": "",
                 "group": "1"
             }
         ]

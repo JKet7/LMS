@@ -61,7 +61,12 @@
                 <div id="slide-list"></div>
                 <div class="btn-group">
                     <button class="btn btn-outline" id="add-slide-btn" onclick="addSlide()">＋ Слайд</button>
+                    <button class="btn btn-outline" onclick="duplicateSlide()" title="Ctrl+D">📋 Дублировать</button>
                     <button class="btn btn-danger" onclick="deleteSlide()">✕ Удалить</button>
+                </div>
+                <div class="btn-group" id="glossary-csv-btns" style="display:none;">
+                    <button class="btn btn-outline" onclick="importGlossaryCsv()" title="Загрузить термины из CSV (Google Sheets / Excel)">📥 Импорт CSV</button>
+                    <button class="btn btn-outline" onclick="exportGlossaryCsv()" title="Выгрузить термины в CSV">📤 Экспорт CSV</button>
                 </div>
             </div>
         </div>
