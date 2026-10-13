@@ -14,6 +14,7 @@
 // randomizeQuestions / randomizeOptions — перемешивание.
 // Контент слайдов/ячеек/терминов: блоки p, h3, ul, quote, link, image, video, table.
 // В p/h3/quote допустимы <b>, <i>, <u>, <s> и style="text-align:...".
+// В тексте можно использовать [[ключ_блока]] для внутренних ссылок.
 // ============================================================
 
 const courseSettings = {
@@ -33,11 +34,15 @@ const allLessons = {
                 "content": [
                     {
                         "type": "p",
-                        "text": "Проверяем текст теории"
+                        "text": "[[new_memo:1]] это круто [[new_lesson]] И как мы говорили в [[new_lesson_1]]<br><br>[[new_lesson_1]] [[new_quiz]]<br>XYZ<br>Проверка маркера((2))",
+                        "notes": [
+                            "ПРОВЕРКА",
+                            "Лай, ла ла лай"
+                        ]
                     },
                     {
                         "type": "h3",
-                        "text": "<!--StartFragment-->Проверяем текст теории<!--EndFragment-->"
+                        "text": "Проверяем текст теории"
                     },
                     {
                         "type": "ul",
@@ -59,11 +64,11 @@ const allLessons = {
                                 "level": 0
                             }
                         ],
-                        "style": "checkbox"
+                        "style": "bullet"
                     },
                     {
                         "type": "quote",
-                        "text": "<!--StartFragment-->Проверяем текст теории<!--EndFragment-->"
+                        "text": "Проверяем текст теории"
                     },
                     {
                         "type": "link",
@@ -72,7 +77,11 @@ const allLessons = {
                     },
                     {
                         "type": "p",
-                        "text": "<div style=\"text-align:center\"><span>Новый абзац</span></div>"
+                        "text": "<p style=\"text-align:center\">Новый абзац</p>"
+                    },
+                    {
+                        "type": "p",
+                        "text": "[[new_memo]]<br><br>[[new_memo]]]] [[new_lesson_1]] <br>"
                     }
                 ]
             },
@@ -82,16 +91,24 @@ const allLessons = {
                 "content": [
                     {
                         "type": "p",
-                        "text": "<!--StartFragment-->Проверяем медиа теории<!--EndFragment-->"
+                        "text": "Проверяем медиа теории"
                     },
                     {
                         "type": "image",
                         "src": "images/1.png",
-                        "alt": ""
+                        "alt": "",
+                        "markers": [
+                            {
+                                "x": 20.4,
+                                "y": 24.5,
+                                "text": "А"
+                            }
+                        ]
                     },
                     {
                         "type": "video",
-                        "src": "videos/1.mp4"
+                        "src": "videos/1.mp4",
+                        "markers": []
                     },
                     {
                         "type": "link",
@@ -227,12 +244,14 @@ const allLessons = {
                     {
                         "type": "image",
                         "src": "images/2.jpeg",
-                        "alt": ""
+                        "alt": "",
+                        "markers": []
                     },
                     {
                         "type": "image",
                         "src": "images/3.png",
-                        "alt": ""
+                        "alt": "",
+                        "markers": []
                     }
                 ]
             }
@@ -374,11 +393,11 @@ const allLessons = {
                 "content": [
                     {
                         "type": "h3",
-                        "text": "<!--StartFragment-->Проверяем текст. <!--EndFragment-->"
+                        "text": "Проверяем текст. "
                     },
                     {
                         "type": "p",
-                        "text": "<!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment-->"
+                        "text": "Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. "
                     }
                 ]
             },
@@ -387,7 +406,7 @@ const allLessons = {
                 "content": [
                     {
                         "type": "quote",
-                        "text": "Выделенная мысль"
+                        "text": "[[new_lesson:2]]"
                     },
                     {
                         "type": "link",
@@ -398,6 +417,10 @@ const allLessons = {
                         "type": "link",
                         "text": "На меня",
                         "href": "https://vk.ru/jket7"
+                    },
+                    {
+                        "type": "p",
+                        "text": "Новый абзац"
                     }
                 ]
             },
@@ -416,7 +439,8 @@ const allLessons = {
                     {
                         "type": "image",
                         "src": "images/1.png",
-                        "alt": ""
+                        "alt": "",
+                        "markers": []
                     }
                 ]
             },
@@ -609,7 +633,8 @@ const allLessons = {
                     {
                         "type": "image",
                         "src": "images/1.png",
-                        "alt": ""
+                        "alt": "",
+                        "markers": []
                     }
                 ]
             },
@@ -631,7 +656,7 @@ const allLessons = {
                 "content": [
                     {
                         "type": "p",
-                        "text": "<!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--StartFragment-->Проверяем текст. <!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment--><!--EndFragment-->"
+                        "text": "Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. Проверяем текст. "
                     }
                 ]
             },
@@ -767,6 +792,22 @@ const allLessons = {
                                 ""
                             ]
                         ]
+                    }
+                ]
+            }
+        ]
+    },
+    "new_lesson_1": {
+        "type": "theory",
+        "title": "ВЕЛИКИЙ",
+        "slides": [
+            {
+                "shortName": "Новый слайд",
+                "title": "Новый слайд",
+                "content": [
+                    {
+                        "type": "p",
+                        "text": "Текст нового слайда."
                     }
                 ]
             }

@@ -3,7 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Учебный курс — теория, тесты, памятки и глоссарий">
+    <meta name="color-scheme" content="light dark">
     <title id="page-title">Курс</title>
+
+    <!-- Anti-FOUC: применяем тему ДО первой отрисовки -->
     <script>
         (function() {
             try {
@@ -16,9 +20,17 @@
             } catch (e) {}
         })();
     </script>
+
     <link rel="stylesheet" href="index.css">
 </head>
 <body>
+
+<noscript>
+    <div style="max-width: 640px; margin: 80px auto; padding: 32px 24px; font-family: sans-serif; line-height: 1.6;">
+        <h1 style="margin: 0 0 12px; font-size: 22px;">⚠ JavaScript отключён</h1>
+        <p style="margin: 0 0 12px;">Курс не может отобразиться без JavaScript. Включи его в настройках браузера и обнови страницу.</p>
+    </div>
+</noscript>
 
 <div class="app-container" id="app-container">
 

@@ -41,27 +41,18 @@ echo  ========================================================
 echo    СОЗДАНИЕ НОВОГО КУРСА
 echo  ========================================================
 echo.
-if not exist "%SOURCE%\" (
-    echo  [ОШИБКА] Папка "%SOURCE%" не найдена.
-    echo  Создай её и положи туда admin.html, admin.js, index.html, index.js и т.д.
-    echo.
-    pause
-    goto menu
-)
-echo  Введи имя папки курса (латиница, без пробелов).
-echo  Пример: english, history, law
+if not exist "%SOURCE%\" goto noSource
+echo  Введи имя папки курса (латиница, цифры, дефис, подчёркивание).
+echo  Пример: english, history, law_2024
 echo.
 set /p foldername="  Имя папки: "
-if "%foldername%"=="" (
-    echo  [ОШИБКА] Имя не введено.
-    pause
-    goto menu
-)
-if exist "%foldername%\" (
-    echo  [ОШИБКА] Папка "%foldername%" уже существует.
-    pause
-    goto menu
-)
+if "%foldername%"=="" goto emptyFolder
+
+echo %foldername%| findstr /R /C:"^[a-zA-Z0-9_-][a-zA-Z0-9_-]*$" >nul
+if errorlevel 1 goto badFolder
+
+if exist "%foldername%\" goto folderExists
+
 echo.
 echo  Введи красивое название курса (можно по-русски, с пробелами).
 echo  Пример: Английский: Артикли
@@ -72,16 +63,12 @@ if "%coursename%"=="" set "coursename=%foldername%"
 echo.
 echo  Создаю папку "%foldername%"...
 mkdir "%foldername%" 2>nul
-if errorlevel 1 (
-    echo  [ОШИБКА] Не удалось создать папку.
-    pause
-    goto menu
-)
+if errorlevel 1 goto mkdirFail
 
 echo  Копирую файлы...
 for %%f in (%COURSE_FILES%) do (
     if exist "%SOURCE%\%%f" (
-        copy /Y "%SOURCE%\%%f" "%foldername%\%%f" >nul
+        copy /Y "%SOURCE%\%%f" "%foldername%\%%f" >nul 2>nul
         echo    + %%f
     ) else (
         echo    - %%f (нет в %SOURCE%)
@@ -90,7 +77,7 @@ for %%f in (%COURSE_FILES%) do (
 
 echo  Копирую папку fonts...
 if exist "%SOURCE%\fonts\" (
-    xcopy /E /I /Y /Q "%SOURCE%\fonts" "%foldername%\fonts" >nul
+    xcopy /E /I /Y /Q "%SOURCE%\fonts" "%foldername%\fonts" >nul 2>nul
     echo    + fonts/
 ) else (
     echo    - fonts/ (нет в %SOURCE%)
@@ -117,10 +104,39 @@ echo.
 echo  Что делать дальше:
 echo    1. Открой %foldername%\admin.html двойным кликом
 echo    2. Наполни курс
-echo    3. Нажми "Сохранить" — обновится data.js
+echo    3. Нажми "Сохранить" - обновится data.js
 echo.
 echo  И не забудь добавить курс в courses.js!
 echo.
+pause
+goto menu
+
+:noSource
+echo  [ОШИБКА] Папка "%SOURCE%" не найдена.
+echo  Создай её и положи туда admin.html, admin.js, index.html, index.js и т.д.
+echo.
+pause
+goto menu
+
+:emptyFolder
+echo  [ОШИБКА] Имя не введено.
+pause
+goto menu
+
+:badFolder
+echo  [ОШИБКА] Имя "%foldername%" содержит недопустимые символы.
+echo  Разрешены только: a-z A-Z 0-9 _ -
+echo  Пробелы, кириллица и спецсимволы запрещены.
+pause
+goto menu
+
+:folderExists
+echo  [ОШИБКА] Папка "%foldername%" уже существует.
+pause
+goto menu
+
+:mkdirFail
+echo  [ОШИБКА] Не удалось создать папку.
 pause
 goto menu
 
@@ -134,12 +150,7 @@ echo  ========================================================
 echo    ОБНОВЛЕНИЕ ВСЕХ КУРСОВ
 echo  ========================================================
 echo.
-if not exist "%SOURCE%\" (
-    echo  [ОШИБКА] Папка "%SOURCE%" не найдена.
-    echo.
-    pause
-    goto menu
-)
+if not exist "%SOURCE%\" goto noSource2
 echo  Будут перезаписаны файлы:
 echo    %COURSE_FILES%
 echo.
@@ -170,12 +181,18 @@ echo.
 pause
 goto menu
 
+:noSource2
+echo  [ОШИБКА] Папка "%SOURCE%" не найдена.
+echo.
+pause
+goto menu
+
 :updateCourse
 set "target=%~1"
 echo  Обновляю %target%...
 for %%f in (%COURSE_FILES%) do (
     if exist "%SOURCE%\%%f" (
-        copy /Y "%SOURCE%\%%f" "%target%\%%f" >nul
+        copy /Y "%SOURCE%\%%f" "%target%\%%f" >nul 2>nul
     )
 )
 goto :eof
@@ -188,7 +205,7 @@ REM ============================================================
 echo // ============================================================
 echo // ДАННЫЕ КУРСА
 echo // Редактируется через admin.html.
-echo // courseKey — уникальный ключ курса, не менять!
+echo // courseKey - уникальный ключ курса, не менять!
 echo // ============================================================
 echo.
 echo const courseSettings = {
@@ -226,24 +243,37 @@ echo    ЗАПУСК ЛОКАЛЬНОГО СЕРВЕРА
 echo  ========================================================
 echo.
 where node >nul 2>nul
-if errorlevel 1 (
-    echo  [ОШИБКА] Node.js не установлен.
-    echo  Скачай с https://nodejs.org/ и установи.
-    echo.
-    pause
-    goto menu
-)
-if not exist "server.js" (
-    echo  [ОШИБКА] Файл server.js не найден в папке %CD%.
-    echo  Положи server.js рядом с courses.bat.
-    echo.
-    pause
-    goto menu
-)
+if errorlevel 1 goto noNode
+if not exist "server.js" goto noServer
+if not exist "index.html" goto noIndex
+goto startServer
+
+:noNode
+echo  [ОШИБКА] Node.js не установлен.
+echo  Скачай с https://nodejs.org/ и установи.
+echo.
+pause
+goto menu
+
+:noServer
+echo  [ОШИБКА] Файл server.js не найден.
+echo  Положи server.js рядом с courses.bat.
+echo.
+pause
+goto menu
+
+:noIndex
+echo  [ОШИБКА] Файл index.html не найден.
+echo  Это точка входа (агрегатор курсов).
+echo.
+pause
+goto menu
+
+:startServer
 echo  Запускаю сервер...
 echo  Закрой это окно или нажми Ctrl+C, чтобы остановить.
 echo.
-start "" http://localhost:3000/courses.html
+start "" http://localhost:3000/index.html
 node server.js
 pause
 goto menu

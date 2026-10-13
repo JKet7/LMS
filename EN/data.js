@@ -56,7 +56,7 @@ const allLessons = {
                 "content": [
                     {
                         "type": "h3",
-                        "text": "<div><span style=\"white-space: pre; white-space: normal;\">\t</span></div><div>Когда используется</div>"
+                        "text": "<span style=\"white-space: pre; white-space: normal;\">\t</span>Когда используется"
                     },
                     {
                         "type": "p",
@@ -64,7 +64,7 @@ const allLessons = {
                     },
                     {
                         "type": "h3",
-                        "text": "<div><span style=\"white-space: pre; white-space: normal;\">\t</span></div><div>Примеры</div>"
+                        "text": "<span style=\"white-space: pre; white-space: normal;\">\t</span>Примеры"
                     },
                     {
                         "type": "p",
@@ -1003,7 +1003,7 @@ const allLessons = {
                     },
                     {
                         "type": "quote",
-                        "text": "<div>Главная мысль: to be (am/is/are) — это вспомогательный глагол-связка, который «достраивает» предложение, когда своего глагола нет.</div>"
+                        "text": "Главная мысль: to be (am/is/are) — это вспомогательный глагол-связка, который «достраивает» предложение, когда своего глагола нет."
                     }
                 ]
             }

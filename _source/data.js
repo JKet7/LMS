@@ -14,6 +14,7 @@
 // randomizeQuestions / randomizeOptions — перемешивание.
 // Контент слайдов/ячеек/терминов: блоки p, h3, ul, quote, link, image, video, table.
 // В p/h3/quote допустимы <b>, <i>, <u>, <s> и style="text-align:...".
+// В тексте можно использовать [[ключ_блока]] для внутренних ссылок.
 // ============================================================
 
 const courseSettings = {
@@ -125,7 +126,8 @@ const allLessons = {
                     {
                         "type": "image",
                         "src": "images/1.png",
-                        "alt": ""
+                        "alt": "",
+                        "markers": []
                     },
                     {
                         "type": "table",
@@ -155,7 +157,10 @@ const allLessons = {
                     },
                     {
                         "type": "p",
-                        "text": "sdmnfajfbgasljdfajsfajsdhfgjdsgfjkasdaf<br><br>"
+                        "text": "sdmnfajfbgasljdfajsfajsdhfgjdsgfjkasdaf<br><br>[[new_quiz_1]][[new_quiz_1]]<br><br>Это проверка примечаний",
+                        "notes": [
+                            "ПРОВЕРКА"
+                        ]
                     }
                 ]
             }
@@ -245,7 +250,8 @@ const allLessons = {
                     {
                         "type": "image",
                         "src": "images/1.png",
-                        "alt": ""
+                        "alt": "",
+                        "markers": []
                     }
                 ]
             }
@@ -433,6 +439,47 @@ const allLessons = {
                     {
                         "type": "p",
                         "text": "Определение термина."
+                    }
+                ]
+            }
+        ]
+    },
+    "new_lesson": {
+        "type": "theory",
+        "title": "Новый блок",
+        "slides": [
+            {
+                "shortName": "Новый слайд",
+                "title": "Новый слайд",
+                "content": [
+                    {
+                        "type": "p",
+                        "text": "Текст нового слайда."
+                    }
+                ]
+            }
+        ]
+    },
+    "new_memo_1": {
+        "type": "memo",
+        "title": "Новая памятка",
+        "cells": [
+            {
+                "title": "НОВАЯ ЯЧЕЙКА",
+                "content": [
+                    {
+                        "type": "ul",
+                        "style": "bullet",
+                        "items": [
+                            {
+                                "text": "Первый пункт",
+                                "level": 0
+                            },
+                            {
+                                "text": "Второй пункт",
+                                "level": 0
+                            }
+                        ]
                     }
                 ]
             }

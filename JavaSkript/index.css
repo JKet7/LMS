@@ -513,6 +513,13 @@ h1, h2, h3 { font-weight: 700; letter-spacing: 0.02em; }
 }
 .slide-content strong { color: var(--text-strong); font-weight: 700; }
 
+.slide-content .text-p {
+    font-size: 16px;
+    line-height: 1.7;
+    margin: 0 0 16px;
+    color: var(--text);
+}
+
 /* ===== СПИСКИ В КОНТЕНТЕ ===== */
 .slide-list {
     list-style: none;
@@ -1223,6 +1230,12 @@ h1, h2, h3 { font-weight: 700; letter-spacing: 0.02em; }
     margin: 0 0 12px;
     color: var(--card-face-text);
 }
+.memo-cell-body .text-p {
+    font-size: 15px;
+    line-height: 1.6;
+    margin: 0 0 12px;
+    color: var(--card-face-text);
+}
 .memo-cell-body p:last-child { margin-bottom: 0; }
 .memo-cell-body h3 {
     font-size: 16px;
@@ -1620,7 +1633,7 @@ h1, h2, h3 { font-weight: 700; letter-spacing: 0.02em; }
 }
 
 /* ============================================================
-   ЧАСТЬ 2 — ПРОЗРАЧНЫЕ КНОПКИ
+   ЧАСТЬ 2 — ПРОЗРАЧНЫЕ КНОПКИ (перекрывают базовые)
    ============================================================ */
 
 /* --- Основная кнопка (.btn-primary) --- */
@@ -1823,8 +1836,9 @@ h1, h2, h3 { font-weight: 700; letter-spacing: 0.02em; }
         max-height: 320px;
     }
 }
+
 /* ===== Превью ссылок ===== */
-.link-block { margin: 20px 0; }
+/* .link-block — уже объявлен выше, в разделе «Ссылки» */
 
 .link-preview-card {
     display: flex;
@@ -1935,5 +1949,438 @@ h1, h2, h3 { font-weight: 700; letter-spacing: 0.02em; }
     .link-preview-thumb {
         width: 100%;
         height: 180px;
+    }
+}
+
+/* ============================================================
+   WIKI-ССЫЛКИ — внутренние ссылки в тексте
+   ============================================================ */
+.wiki-link {
+    display: inline;
+    color: var(--primary);
+    font-weight: 600;
+    text-decoration: none;
+    border-bottom: 1px dashed var(--primary);
+    padding: 0 2px;
+    cursor: pointer;
+    transition: all .15s;
+    border-radius: 3px;
+    white-space: nowrap;
+}
+.wiki-link:hover {
+    background: var(--primary-soft);
+    border-bottom-style: solid;
+}
+
+/* Цвет и подсветка по типу блока */
+
+/* Тест — зелёный */
+.wiki-link.wiki-link-quiz {
+    color: var(--primary);
+    border-bottom-color: var(--primary);
+}
+.wiki-link.wiki-link-quiz:hover {
+    background: var(--primary-soft);
+}
+
+/* Теория — бордовый */
+.wiki-link.wiki-link-theory {
+    color: var(--secondary);
+    border-bottom-color: var(--secondary);
+}
+.wiki-link.wiki-link-theory:hover {
+    background: var(--secondary-soft);
+}
+
+/* Памятка и глоссарий — синий */
+.wiki-link.wiki-link-memo,
+.wiki-link.wiki-link-glossary {
+    color: var(--memo-accent);
+    border-bottom-color: var(--memo-accent);
+}
+.wiki-link.wiki-link-memo:hover,
+.wiki-link.wiki-link-glossary:hover {
+    background: var(--memo-accent-soft);
+}
+
+/* Битые ссылки — блок не найден */
+.wiki-link-broken {
+    display: inline;
+    color: var(--error);
+    text-decoration: line-through;
+    cursor: help;
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    padding: 0 2px;
+    border-radius: 3px;
+}
+
+/* Внутри ячейки памятки — цвета на фоне card-face */
+.memo-cell-body .wiki-link {
+    font-weight: 700;
+}
+
+/* Внутри цитаты */
+.quote .wiki-link,
+.slide-content .quote .wiki-link {
+    font-weight: 700;
+}
+
+/* В тесте — не ломать строку в вариантах */
+.quiz-opt .wiki-link {
+    white-space: normal;
+}
+
+/* На мобильном — не вылезать за пределы */
+@media (max-width: 600px) {
+    .wiki-link {
+        white-space: normal;
+    }
+}
+
+/* ============================================================
+   BACKLINKS — обратные ссылки
+   ============================================================ */
+.backlinks-block {
+    margin-top: 32px;
+    padding: 16px 20px;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+}
+
+.backlinks-title {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .8px;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+}
+
+.backlinks-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.backlinks-list li {
+    margin: 0;
+    padding: 0;
+}
+
+.backlinks-list .wiki-link {
+    display: inline-block;
+    font-size: 14px;
+    padding: 4px 10px;
+    border-radius: var(--radius-sm);
+    white-space: normal;
+    border-bottom: none;
+}
+.backlinks-list .wiki-link:hover {
+    background: var(--primary-soft);
+}
+.backlinks-list .wiki-link.wiki-link-theory:hover {
+    background: var(--secondary-soft);
+}
+.backlinks-list .wiki-link.wiki-link-memo:hover,
+.backlinks-list .wiki-link.wiki-link-glossary:hover {
+    background: var(--memo-accent-soft);
+}
+
+/* ============================================================
+   ПРИМЕЧАНИЯ В ТЕКСТЕ ((N)) — слово и карточка
+   ============================================================ */
+
+/* Подсвеченное слово в тексте */
+.note {
+    color: var(--nav-current);
+    border-bottom: 1px dotted var(--nav-current);
+    cursor: pointer;
+    padding: 0 2px;
+    font-weight: 600;
+    white-space: nowrap;
+    transition: background .15s;
+}
+.note:hover {
+    background: var(--nav-current-soft);
+    border-bottom-style: solid;
+}
+
+.note-broken {
+    color: var(--error);
+    border-bottom: 1px dotted var(--error);
+    cursor: help;
+    padding: 0 2px;
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+}
+
+/* Внутри памятки — цвета на фоне card-face */
+.memo-cell-body .note {
+    color: var(--memo-accent);
+    border-bottom-color: var(--memo-accent);
+}
+.memo-cell-body .note:hover {
+    background: var(--memo-accent-soft);
+}
+
+/* Внутри цитаты */
+.quote .note {
+    color: var(--secondary);
+    border-bottom-color: var(--secondary);
+}
+.quote .note:hover {
+    background: var(--secondary-soft);
+}
+
+/* В вариантах теста — не ломать строку */
+.quiz-opt .note {
+    white-space: normal;
+}
+
+@media (max-width: 600px) {
+    .note { white-space: normal; }
+}
+
+/* Всплывающая карточка (общая для примечаний и маркеров) */
+.note-card {
+    position: absolute;
+    z-index: 10000;
+    max-width: 380px;
+    max-height: 320px;
+    overflow-y: auto;
+    padding: 14px 18px;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    font-size: 14px;
+    line-height: 1.55;
+    color: var(--text);
+    white-space: pre-wrap;
+    word-break: break-word;
+    opacity: 0;
+    transform: translateY(-4px);
+    transition: opacity .15s, transform .15s;
+    pointer-events: auto;
+}
+.note-card.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* ============================================================
+   МАРКЕРЫ НА КАРТИНКЕ
+   ============================================================ */
+
+/* Обёртка картинки с маркерами */
+.img-with-markers {
+    position: relative;
+    display: inline-block;
+    max-width: 100%;
+    line-height: 0;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    background: var(--media-bg);
+}
+.img-with-markers img {
+    display: block;
+    width: 100%;
+    height: auto;
+    cursor: zoom-in;
+    user-select: none;
+    -webkit-user-drag: none;
+}
+
+/* Сам маркер (кружок с крестиком) */
+.img-marker {
+    position: absolute;
+    width: 28px;
+    height: 28px;
+    margin-left: -14px;
+    margin-top: -14px;
+    border-radius: 50%;
+    background: var(--nav-current);
+    color: #fff;
+    border: 2px solid #fff;
+    box-shadow: 0 2px 8px rgba(0,0,0,.4);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    padding: 0;
+    transition: transform .15s, background .15s;
+    font-family: inherit;
+    z-index: 2;
+    user-select: none;
+}
+.img-marker::after {
+    content: "✕";
+    font-size: 12px;
+}
+.img-marker:hover,
+.img-marker.is-active {
+    transform: scale(1.2);
+    background: var(--primary);
+    z-index: 5;
+}
+@media (max-width: 600px) {
+    .img-marker {
+        width: 24px;
+        height: 24px;
+        margin-left: -12px;
+        margin-top: -12px;
+        font-size: 12px;
+    }
+    .img-marker::after { font-size: 10px; }
+}
+
+/* ============================================================
+   МОДАЛКА маркера (для мобильных)
+   ============================================================ */
+.img-marker-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(13, 20, 22, .7);
+    backdrop-filter: blur(3px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    z-index: 10000;
+    animation: fadeIn .2s ease;
+}
+.img-marker-modal {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    width: 100%;
+    max-width: 520px;
+    max-height: calc(100vh - 40px);
+    display: flex;
+    flex-direction: column;
+    padding: 24px 26px;
+    animation: fadeIn .25s ease;
+}
+.img-marker-modal-title {
+    margin: 0 0 14px;
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--text-strong);
+}
+.img-marker-modal-body {
+    flex: 1;
+    overflow-y: auto;
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--text);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.img-marker-modal-actions {
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: flex-end;
+}
+
+/* ============================================================
+   ЛАЙТБОКС — увеличение картинки по двойному клику
+   ============================================================ */
+.lightbox-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, .9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    z-index: 20000;
+    cursor: zoom-out;
+    animation: fadeIn .2s ease;
+}
+.lightbox-overlay img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    border-radius: 4px;
+    cursor: zoom-out;
+    user-select: none;
+    -webkit-user-drag: none;
+}
+.lightbox-close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255, 255, 255, .15);
+    color: #fff;
+    font-size: 22px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: inherit;
+    transition: all .15s;
+}
+.lightbox-close:hover {
+    background: rgba(255, 255, 255, .3);
+    transform: scale(1.05);
+}
+
+/* ============================================================
+   ПЕЧАТЬ — примечания под абзацем / картинкой
+   ============================================================ */
+.print-notes {
+    margin: 8px 0 16px 0;
+    padding: 8px 12px;
+    border-left: 3px solid #999;
+    font-size: 11pt;
+    line-height: 1.5;
+}
+.print-note-item {
+    margin-bottom: 2px;
+    color: #000;
+}
+
+@media print {
+    /* Маркеры в печати — тёмные кружки */
+    .img-marker {
+        background: #000 !important;
+        color: #fff !important;
+        border: 2px solid #fff !important;
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+        transform: none !important;
+    }
+    .img-with-markers img { cursor: default; }
+
+    /* Текст примечания в печати — как [N] */
+    .note {
+        color: #000 !important;
+        border-bottom: none !important;
+        font-weight: 700;
+        white-space: normal;
+    }
+    .note::before { content: "["; }
+    .note::after { content: "]"; }
+
+    /* Скрываем всплывающие элементы */
+    .note-card,
+    .img-marker-modal-overlay,
+    .lightbox-overlay {
+        display: none !important;
     }
 }

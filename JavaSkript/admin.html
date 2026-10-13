@@ -2,10 +2,35 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Редактор курса — конструктор учебных курсов">
+    <meta name="color-scheme" content="light dark">
     <title>Редактор курса</title>
+
+    <!-- Anti-FOUC: применяем тему ДО первой отрисовки и до загрузки CSS -->
+    <script>
+        (function() {
+            try {
+                var t = localStorage.getItem("kp_course_theme");
+                if (t === "dark" || t === "light") {
+                    document.documentElement.setAttribute("data-theme", t);
+                } else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+                    document.documentElement.setAttribute("data-theme", "dark");
+                }
+            } catch (e) {}
+        })();
+    </script>
+
     <link rel="stylesheet" href="admin.css">
 </head>
 <body>
+
+<noscript>
+    <div style="max-width: 640px; margin: 80px auto; padding: 32px 24px; font-family: sans-serif; line-height: 1.6;">
+        <h1 style="margin: 0 0 12px; font-size: 22px;">⚠ JavaScript отключён</h1>
+        <p style="margin: 0 0 12px;">Редактор курса не может работать без JavaScript. Включи его в настройках браузера и обнови страницу.</p>
+    </div>
+</noscript>
 
 <div class="topbar">
     <div class="left">
@@ -25,47 +50,49 @@
 
 <div class="layout">
     <aside class="sidebar">
+
         <div class="card">
             <div class="card-section">
-                <div class="section-title">Блоки курса</div>
+                <div class="section-header">
+                    <div class="section-title">Блоки курса</div>
+                    <div class="section-actions">
+                        <div class="dropdown-wrap">
+                            <button class="btn btn-outline btn-sm" onclick="toggleDropdown(event, 'add-lesson-menu')">＋ Добавить ▾</button>
+                            <div class="dropdown-menu" id="add-lesson-menu">
+                                <button onclick="closeAllDropdowns(); addLesson('theory')">＋ Теория</button>
+                                <button onclick="closeAllDropdowns(); addLesson('quiz')">＋ Тест</button>
+                                <button onclick="closeAllDropdowns(); addLesson('memo')">＋ Памятка</button>
+                                <button onclick="closeAllDropdowns(); addLesson('glossary')">＋ Глоссарий</button>
+                            </div>
+                        </div>
+                        <div class="dropdown-wrap">
+                            <button class="btn-icon" onclick="toggleDropdown(event, 'course-actions-menu')" title="Действия">⋮</button>
+                            <div class="dropdown-menu dropdown-menu-right" id="course-actions-menu">
+                                <button onclick="closeAllDropdowns(); importLesson()">📥 Импорт блока</button>
+                                <button onclick="closeAllDropdowns(); exportCourse()">📤 Экспорт курса</button>
+                                <button onclick="closeAllDropdowns(); importCourse()">📥 Импорт всего курса</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 <div id="lesson-list"></div>
-                <div class="btn-group">
-                    <button class="btn btn-outline" onclick="addLesson('theory')">＋ Теория</button>
-                    <button class="btn btn-outline" onclick="addLesson('quiz')">＋ Тест</button>
-                </div>
-                <div class="btn-group">
-                    <button class="btn btn-outline" onclick="addLesson('memo')">＋ Памятка</button>
-                    <button class="btn btn-outline" onclick="addLesson('glossary')">＋ Глоссарий</button>
-                </div>
-                <div class="btn-group">
-                    <button class="btn btn-outline" onclick="importLesson()" title="Загрузить блок из файла .json">📥 Импорт блока</button>
-                </div>
-                <div class="btn-group">
-                    <button class="btn btn-outline" onclick="exportCourse()" title="Скачать весь курс в файл .json">📤 Экспорт курса</button>
-                </div>
-                <div class="btn-group">
-                    <button class="btn btn-outline" onclick="importCourse()" title="Заменить весь курс из файла .json">📥 Импорт всего курса</button>
-                </div>
-                <div class="btn-group">
-                    <button class="btn btn-danger" onclick="deleteLesson()">✕ Удалить блок</button>
-                </div>
             </div>
         </div>
 
         <div class="card" id="slides-card">
             <div class="card-section">
-                <div class="section-title" id="cells-section-title">Слайды блока</div>
+                <div class="section-header">
+                    <div class="section-title" id="cells-section-title">Слайды блока</div>
+                    <div class="section-actions">
+                        <button class="btn btn-outline btn-sm" id="add-slide-btn" onclick="addSlide()">＋ Слайд</button>
+                    </div>
+                </div>
                 <div id="term-search-wrap" style="display:none;">
                     <input type="text" class="input" id="term-search" placeholder="🔍 Поиск термина..." oninput="renderTermsList()">
                 </div>
                 <div id="slide-list"></div>
-                <div class="btn-group">
-                    <button class="btn btn-outline" id="add-slide-btn" onclick="addSlide()">＋ Слайд</button>
-                    <button class="btn btn-outline" onclick="duplicateSlide()" title="Ctrl+D">📋 Дублировать</button>
-                    <button class="btn btn-danger" onclick="deleteSlide()">✕ Удалить</button>
-                </div>
                 <div class="btn-group" id="glossary-csv-btns" style="display:none;">
-                    <button class="btn btn-outline" onclick="importGlossaryCsv()" title="Загрузить термины из CSV (Google Sheets / Excel)">📥 Импорт CSV</button>
+                    <button class="btn btn-outline" onclick="importGlossaryCsv()" title="Загрузить термины из CSV">📥 Импорт CSV</button>
                     <button class="btn btn-outline" onclick="exportGlossaryCsv()" title="Выгрузить термины в CSV">📤 Экспорт CSV</button>
                 </div>
             </div>

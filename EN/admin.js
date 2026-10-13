@@ -65,7 +65,55 @@ const MAX_TABLE_ROWS = 10;
 const MAX_TABLE_COLS = 10;
 const MAX_LIST_LEVEL = 2;
 
+// Таймаут для fetch (мс). Защита от зависшего запроса, который заблокирует автосохранение.
+const FETCH_TIMEOUT_MS = 15000;
+
 let pvState = null;
+
+// ============================================================
+// УТИЛИТА: безопасный JSON.stringify для вставки в data.js
+// Экранирует \u2028 и \u2029 — иначе JS-парсер в браузере сломается,
+// если в тексте есть эти символы (часто — при копипасте из Word).
+// ============================================================
+function safeJsonStringify(obj) {
+    return JSON.stringify(obj, null, 4)
+        .replace(/\u2028/g, "\\u2028")
+        .replace(/\u2029/g, "\\u2029");
+}
+
+// fetch с таймаутом. Бросает Error по истечении FETCH_TIMEOUT_MS.
+async function fetchWithTimeout(url, options = {}) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    try {
+        const res = await fetch(url, { ...options, signal: controller.signal });
+        return res;
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+// ============================================================
+// ВЫПАДАЮЩИЕ МЕНЮ
+// ============================================================
+function toggleDropdown(event, menuId) {
+    event.stopPropagation();
+    const menu = document.getElementById(menuId);
+    if (!menu) return;
+    const isOpen = menu.classList.contains("show");
+    closeAllDropdowns();
+    if (!isOpen) menu.classList.add("show");
+}
+
+function closeAllDropdowns() {
+    document.querySelectorAll(".dropdown-menu.show").forEach(m => m.classList.remove("show"));
+}
+
+document.addEventListener("click", (e) => {
+    if (!e.target.closest(".dropdown-wrap")) {
+        closeAllDropdowns();
+    }
+});
 
 function normalizeCorrect(correct) {
     if (Array.isArray(correct)) return correct;
@@ -80,7 +128,7 @@ function detectType(q) {
 }
 
 // ============================================================
-// Миграция: старые строки в items[] → {text, level}
+// Миграция старых списков
 // ============================================================
 function migrateListBlock(b) {
     if (!b || b.type !== "ul") return;
@@ -99,7 +147,12 @@ function migrateListBlock(b) {
 
 function migrateListBlocksInContent(content) {
     if (!Array.isArray(content)) return;
-    content.forEach(b => migrateListBlock(b));
+    content.forEach(b => {
+        migrateListBlock(b);
+        if (b && b.type === "image" && !Array.isArray(b.markers)) {
+            b.markers = [];
+        }
+    });
 }
 
 Object.values(allLessons).forEach(lesson => {
@@ -145,7 +198,7 @@ Object.values(allLessons).forEach(lesson => {
             }
             if (slide.image && slide.image.trim()) {
                 const hasImage = slide.content.some(b => b.type === "image");
-                if (!hasImage) slide.content.unshift({ type: "image", src: slide.image, alt: "" });
+                if (!hasImage) slide.content.unshift({ type: "image", src: slide.image, alt: "", markers: [] });
                 slide.image = "";
             }
         });
@@ -216,6 +269,24 @@ function init() {
             }
         } catch (e) {}
     }
+
+    // ЗАЩИТА: если в курсе нет ни одного блока — показываем сообщение
+    const ids = Object.keys(allLessons);
+    if (ids.length === 0) {
+        // Создаём хотя бы один блок по умолчанию, иначе редактор работать не сможет
+        const key = "new_lesson";
+        allLessons[key] = {
+            type: "theory",
+            title: "Новый блок",
+            slides: [{
+                shortName: "Новый слайд",
+                title: "Новый слайд",
+                content: [{ type: "p", text: "Текст нового слайда." }]
+            }]
+        };
+        setStatus("Курс был пустой — создан первый блок «Новый блок».", "warn");
+    }
+
     state.currentLessonId = Object.keys(allLessons)[0];
     state.currentSlideIndex = 0;
     refreshAll();
@@ -228,6 +299,7 @@ function refreshAll() {
     document.getElementById("page-title-input").value = courseSettings.pageTitle || "";
     renderLessonList();
     const lesson = currentLesson();
+    if (!lesson) return;
     document.getElementById("lesson-title-input").value = lesson.title;
     const typeLabels = { quiz: "Тест", theory: "Теория", memo: "Памятка", glossary: "Глоссарий" };
     document.getElementById("lesson-type-display").value = typeLabels[lesson.type] || lesson.type;
@@ -268,14 +340,27 @@ function refreshAll() {
     }
 }
 
+/* ============================================================
+   БЛОКИ КУРСА — с ручкой, ⋮ и drag&drop
+   ============================================================ */
 function renderLessonList() {
     const list = document.getElementById("lesson-list");
     list.innerHTML = "";
     const ids = Object.keys(allLessons);
+
     ids.forEach((id, index) => {
         const l = allLessons[id];
         const row = document.createElement("div");
         row.className = "lesson-row";
+        row.dataset.lessonId = id;
+
+        const handle = document.createElement("div");
+        handle.className = "drag-handle";
+        handle.textContent = "⠿";
+        handle.title = "Перетащи, чтобы переместить";
+        handle.draggable = true;
+        row.appendChild(handle);
+
         const btn = document.createElement("button");
         btn.className = "lesson-item" + (id === state.currentLessonId ? " current" : "");
         let typeLabel, count;
@@ -308,34 +393,156 @@ function renderLessonList() {
             });
         }
 
-        const exp = document.createElement("button");
-        exp.className = "icon-btn-sm export"; exp.textContent = "📤";
-        exp.title = "Экспортировать блок в файл .json";
-        exp.onclick = (e) => { e.stopPropagation(); exportLesson(id); };
-        row.appendChild(exp);
+        const menuBtn = document.createElement("button");
+        menuBtn.className = "lesson-menu-btn";
+        menuBtn.textContent = "⋮";
+        menuBtn.title = "Действия с блоком";
+        menuBtn.onclick = (e) => {
+            e.stopPropagation();
+            openLessonContextMenu(e, id, index, ids.length);
+        };
+        row.appendChild(menuBtn);
 
-        const dup = document.createElement("button");
-        dup.className = "icon-btn-sm"; dup.textContent = "📋";
-        dup.title = "Дублировать блок";
-        dup.onclick = (e) => { e.stopPropagation(); duplicateLesson(id); };
-        row.appendChild(dup);
-
-        const up = document.createElement("button");
-        up.className = "icon-btn-sm"; up.textContent = "↑";
-        up.title = "Вверх";
-        up.disabled = index === 0;
-        up.onclick = (e) => { e.stopPropagation(); moveLesson(id, -1); };
-        row.appendChild(up);
-
-        const dn = document.createElement("button");
-        dn.className = "icon-btn-sm"; dn.textContent = "↓";
-        dn.title = "Вниз";
-        dn.disabled = index === ids.length - 1;
-        dn.onclick = (e) => { e.stopPropagation(); moveLesson(id, 1); };
-        row.appendChild(dn);
+        setupLessonDrag(row, handle, id, index);
 
         list.appendChild(row);
     });
+}
+
+function openLessonContextMenu(event, id, index, totalCount) {
+    event.stopPropagation();
+    const old = document.getElementById("lesson-ctx-menu");
+    if (old) old.remove();
+
+    const menu = document.createElement("div");
+    menu.className = "dropdown-menu show";
+    menu.id = "lesson-ctx-menu";
+    menu.style.position = "fixed";
+    menu.style.left = Math.min(event.clientX, window.innerWidth - 220) + "px";
+    menu.style.top = (event.clientY + 4) + "px";
+    menu.style.zIndex = "1000";
+
+    if (index > 0) {
+        const upBtn = document.createElement("button");
+        upBtn.textContent = "↑ Переместить вверх";
+        upBtn.onclick = () => { menu.remove(); moveLesson(id, -1); };
+        menu.appendChild(upBtn);
+    }
+    if (index < totalCount - 1) {
+        const dnBtn = document.createElement("button");
+        dnBtn.textContent = "↓ Переместить вниз";
+        dnBtn.onclick = () => { menu.remove(); moveLesson(id, 1); };
+        menu.appendChild(dnBtn);
+    }
+
+    const dupBtn = document.createElement("button");
+    dupBtn.textContent = "📋 Дублировать";
+    dupBtn.onclick = () => { menu.remove(); duplicateLesson(id); };
+    menu.appendChild(dupBtn);
+
+    const expBtn = document.createElement("button");
+    expBtn.textContent = "📤 Экспортировать блок";
+    expBtn.onclick = () => { menu.remove(); exportLesson(id); };
+    menu.appendChild(expBtn);
+
+    const delBtn = document.createElement("button");
+    delBtn.textContent = "✕ Удалить блок";
+    delBtn.style.color = "var(--error)";
+    delBtn.onclick = () => {
+        menu.remove();
+        if (state.currentLessonId !== id) {
+            readFromDom();
+            state.currentLessonId = id;
+            state.currentSlideIndex = 0;
+            refreshAll();
+        }
+        deleteLesson();
+    };
+    menu.appendChild(delBtn);
+
+    document.body.appendChild(menu);
+
+    setTimeout(() => {
+        const closeHandler = (e) => {
+            if (!menu.contains(e.target)) {
+                menu.remove();
+                document.removeEventListener("click", closeHandler);
+            }
+        };
+        document.addEventListener("click", closeHandler);
+    }, 0);
+}
+
+function setupLessonDrag(row, handle, lessonId, index) {
+    handle.addEventListener("dragstart", (e) => {
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", lessonId);
+        row.classList.add("dragging");
+        document.body.dataset.dragType = "lesson";
+    });
+
+    handle.addEventListener("dragend", () => {
+        row.classList.remove("dragging");
+        document.querySelectorAll(".lesson-row").forEach(r => {
+            r.classList.remove("drag-over-top", "drag-over-bottom");
+        });
+    });
+
+    row.addEventListener("dragover", (e) => {
+        if (document.body.dataset.dragType !== "lesson") return;
+        e.preventDefault();
+        const rect = row.getBoundingClientRect();
+        const midpoint = rect.top + rect.height / 2;
+        if (e.clientY < midpoint) {
+            row.classList.add("drag-over-top");
+            row.classList.remove("drag-over-bottom");
+        } else {
+            row.classList.add("drag-over-bottom");
+            row.classList.remove("drag-over-top");
+        }
+    });
+
+    row.addEventListener("dragleave", () => {
+        row.classList.remove("drag-over-top", "drag-over-bottom");
+    });
+
+    row.addEventListener("drop", (e) => {
+        if (document.body.dataset.dragType !== "lesson") return;
+        e.preventDefault();
+        const draggedId = e.dataTransfer.getData("text/plain");
+        if (!draggedId || draggedId === lessonId) return;
+
+        const rect = row.getBoundingClientRect();
+        const midpoint = rect.top + rect.height / 2;
+        const insertAfter = e.clientY >= midpoint;
+
+        readFromDom();
+        reorderLesson(draggedId, lessonId, insertAfter);
+    });
+}
+
+function reorderLesson(draggedId, targetId, insertAfter) {
+    const ids = Object.keys(allLessons);
+    const draggedIdx = ids.indexOf(draggedId);
+    const targetIdx = ids.indexOf(targetId);
+    if (draggedIdx === -1 || targetIdx === -1) return;
+
+    const entries = Object.entries(allLessons);
+    const [dragged] = entries.splice(draggedIdx, 1);
+
+    let newTargetIdx = entries.findIndex(([k]) => k === targetId);
+    if (newTargetIdx === -1) { entries.push(dragged); }
+    else {
+        const insertIdx = insertAfter ? newTargetIdx + 1 : newTargetIdx;
+        entries.splice(insertIdx, 0, dragged);
+    }
+
+    for (const k in allLessons) delete allLessons[k];
+    entries.forEach(([k, v]) => { allLessons[k] = v; });
+
+    renderLessonList();
+    saveDraft();
+    autoSaveToServer();
 }
 
 function copyToClipboard(text) {
@@ -375,7 +582,6 @@ function pluralizeCells(n) {
     if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return "ячейки";
     return "ячеек";
 }
-
 function pluralizeTerms(n) {
     const mod10 = n % 10;
     const mod100 = n % 100;
@@ -396,6 +602,7 @@ function moveLesson(id, direction) {
     for (const k in allLessons) delete allLessons[k];
     entries.forEach(([k, v]) => { allLessons[k] = v; });
     renderLessonList(); saveDraft();
+    autoSaveToServer();
 }
 
 function duplicateLesson(id) {
@@ -427,32 +634,27 @@ function duplicateLesson(id) {
 
     refreshAll();
     saveDraft();
+    autoSaveToServer();
     setStatus("📋 Создана копия блока: " + copy.title, "ok");
 }
 
+/* ============================================================
+   СЛАЙДЫ — с ручкой, ⋮ и drag&drop
+   ============================================================ */
 function renderSlideList() {
     const slides = currentLesson().slides || [];
     const list = document.getElementById("slide-list");
     list.innerHTML = "";
     slides.forEach((s, i) => {
-        const btn = document.createElement("button");
-        btn.className = "slide-item" + (i === state.currentSlideIndex ? " current" : "");
-        const hasMedia = (s.content || []).some(b => b.type === "image" || b.type === "video");
-        const icon = hasMedia ? "🖼 " : "📄 ";
-        btn.textContent = icon + (i + 1) + ". " + (s.shortName || s.title || "Без названия");
-        btn.onclick = () => { readFromDom(); state.currentSlideIndex = i; renderSlideList(); renderSlide(); };
-        list.appendChild(btn);
+        const row = createSlideRow({
+            index: i,
+            title: s.shortName || s.title || "Без названия",
+            icon: (s.content || []).some(b => b.type === "image" || b.type === "video") ? "🖼 " : "📄 ",
+            current: i === state.currentSlideIndex,
+            type: "slide"
+        });
+        list.appendChild(row);
     });
-}
-
-function renderSlide() {
-    const slide = currentLesson().slides[state.currentSlideIndex];
-    if (!slide) return;
-    document.getElementById("slide-shortname-input").value = slide.shortName || "";
-    document.getElementById("slide-title-input").value = slide.title || "";
-    const box = document.getElementById("preview-content");
-    box.innerHTML = "";
-    (slide.content || []).forEach((b, i) => box.appendChild(createBlockElement(b, i, "slide")));
 }
 
 function renderCellsList() {
@@ -461,14 +663,16 @@ function renderCellsList() {
     const list = document.getElementById("slide-list");
     list.innerHTML = "";
     cells.forEach((c, i) => {
-        const btn = document.createElement("button");
-        btn.className = "slide-item" + (i === state.currentSlideIndex ? " current" : "");
-        const hasMedia = (c.content || []).some(b => b.type === "image" || b.type === "video");
-        const icon = hasMedia ? "🖼 " : "📌 ";
         const title = c.title ? c.title : "(без заголовка)";
-        btn.textContent = icon + (i + 1) + ". " + title;
-        btn.onclick = () => { readFromDom(); state.currentSlideIndex = i; renderCellsList(); renderCell(); };
-        list.appendChild(btn);
+        const icon = (c.content || []).some(b => b.type === "image" || b.type === "video") ? "🖼 " : "📌 ";
+        const row = createSlideRow({
+            index: i,
+            title: title,
+            icon: icon,
+            current: i === state.currentSlideIndex,
+            type: "cell"
+        });
+        list.appendChild(row);
     });
     const addBtn = document.getElementById("add-slide-btn");
     if (cells.length >= MAX_MEMO_CELLS) {
@@ -482,29 +686,6 @@ function renderCellsList() {
         addBtn.style.opacity = "";
         addBtn.style.cursor = "";
     }
-}
-
-function renderCell() {
-    const lesson = currentLesson();
-    const cell = lesson.cells[state.currentSlideIndex];
-    if (!cell) return;
-    document.getElementById("cell-title-input").value = cell.title || "";
-    const box = document.getElementById("memo-content");
-    box.innerHTML = "";
-    (cell.content || []).forEach((b, i) => box.appendChild(createBlockElement(b, i, "memo")));
-}
-
-/* ===== ГЛОССАРИЙ ===== */
-function getSortedTermsWithIndexes(lesson) {
-    const arr = (lesson.terms || []).map((term, origIndex) => ({ term, origIndex }));
-    arr.sort((a, b) => {
-        const na = String(a.term.name || "").trim().toLowerCase();
-        const nb = String(b.term.name || "").trim().toLowerCase();
-        if (na < nb) return -1;
-        if (na > nb) return 1;
-        return a.origIndex - b.origIndex;
-    });
-    return arr;
 }
 
 function renderTermsList() {
@@ -523,17 +704,14 @@ function renderTermsList() {
         if (query && !name.toLowerCase().includes(query)) return;
         shown++;
 
-        const btn = document.createElement("button");
-        btn.className = "slide-item" + (item.origIndex === state.currentSlideIndex ? " current" : "");
-        const title = name || "(без названия)";
-        btn.textContent = title;
-        btn.onclick = () => {
-            readFromDom();
-            state.currentSlideIndex = item.origIndex;
-            renderTermsList();
-            renderTerm();
-        };
-        list.appendChild(btn);
+        const row = createSlideRow({
+            index: item.origIndex,
+            title: name || "(без названия)",
+            icon: "",
+            current: item.origIndex === state.currentSlideIndex,
+            type: "term"
+        });
+        list.appendChild(row);
     });
 
     if (shown === 0 && query) {
@@ -550,6 +728,235 @@ function renderTermsList() {
     addBtn.style.cursor = "";
 }
 
+function createSlideRow(opts) {
+    const { index, title, icon, current, type } = opts;
+    const row = document.createElement("div");
+    row.className = "slide-row";
+    row.dataset.index = index;
+    row.dataset.type = type;
+
+    const handle = document.createElement("div");
+    handle.className = "drag-handle";
+    handle.textContent = "⠿";
+    handle.title = "Перетащи, чтобы переместить";
+    handle.draggable = true;
+    row.appendChild(handle);
+
+    const btn = document.createElement("button");
+    btn.className = "slide-item" + (current ? " current" : "");
+    btn.textContent = icon + (index + 1) + ". " + title;
+    btn.onclick = () => {
+        readFromDom();
+        state.currentSlideIndex = index;
+        const lesson = currentLesson();
+        if (lesson.type === "memo") { renderCellsList(); renderCell(); }
+        else if (lesson.type === "glossary") { renderTermsList(); renderTerm(); }
+        else { renderSlideList(); renderSlide(); }
+    };
+    row.appendChild(btn);
+
+    const menuBtn = document.createElement("button");
+    menuBtn.className = "slide-menu-btn";
+    menuBtn.textContent = "⋮";
+    menuBtn.title = "Действия";
+    menuBtn.onclick = (e) => {
+        e.stopPropagation();
+        openSlideContextMenu(e, index, type);
+    };
+    row.appendChild(menuBtn);
+
+    setupSlideDrag(row, handle, index, type);
+
+    return row;
+}
+
+function openSlideContextMenu(event, index, type) {
+    event.stopPropagation();
+    const old = document.getElementById("slide-ctx-menu");
+    if (old) old.remove();
+
+    const lesson = currentLesson();
+    const items = type === "cell" ? (lesson.cells || [])
+        : type === "term" ? (lesson.terms || [])
+        : (lesson.slides || []);
+
+    const menu = document.createElement("div");
+    menu.className = "dropdown-menu show";
+    menu.id = "slide-ctx-menu";
+    menu.style.position = "fixed";
+    menu.style.left = Math.min(event.clientX, window.innerWidth - 220) + "px";
+    menu.style.top = (event.clientY + 4) + "px";
+    menu.style.zIndex = "1000";
+
+    if (index > 0) {
+        const upBtn = document.createElement("button");
+        upBtn.textContent = "↑ Переместить вверх";
+        upBtn.onclick = () => { menu.remove(); moveSlide(index, -1, type); };
+        menu.appendChild(upBtn);
+    }
+    if (index < items.length - 1) {
+        const dnBtn = document.createElement("button");
+        dnBtn.textContent = "↓ Переместить вниз";
+        dnBtn.onclick = () => { menu.remove(); moveSlide(index, 1, type); };
+        menu.appendChild(dnBtn);
+    }
+
+    const dupBtn = document.createElement("button");
+    dupBtn.textContent = "📋 Дублировать";
+    dupBtn.onclick = () => {
+        menu.remove();
+        readFromDom();
+        state.currentSlideIndex = index;
+        duplicateSlide();
+    };
+    menu.appendChild(dupBtn);
+
+    const delBtn = document.createElement("button");
+    delBtn.textContent = "✕ Удалить";
+    delBtn.style.color = "var(--error)";
+    delBtn.onclick = () => {
+        menu.remove();
+        readFromDom();
+        state.currentSlideIndex = index;
+        deleteSlide();
+    };
+    menu.appendChild(delBtn);
+
+    document.body.appendChild(menu);
+
+    setTimeout(() => {
+        const closeHandler = (e) => {
+            if (!menu.contains(e.target)) {
+                menu.remove();
+                document.removeEventListener("click", closeHandler);
+            }
+        };
+        document.addEventListener("click", closeHandler);
+    }, 0);
+}
+
+function setupSlideDrag(row, handle, index, type) {
+    handle.addEventListener("dragstart", (e) => {
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", String(index));
+        row.classList.add("dragging");
+        document.body.dataset.dragType = "slide-" + type;
+    });
+
+    handle.addEventListener("dragend", () => {
+        row.classList.remove("dragging");
+        document.querySelectorAll(".slide-row").forEach(r => {
+            r.classList.remove("drag-over-top", "drag-over-bottom");
+        });
+    });
+
+    row.addEventListener("dragover", (e) => {
+        if (document.body.dataset.dragType !== "slide-" + type) return;
+        e.preventDefault();
+        const rect = row.getBoundingClientRect();
+        const midpoint = rect.top + rect.height / 2;
+        if (e.clientY < midpoint) {
+            row.classList.add("drag-over-top");
+            row.classList.remove("drag-over-bottom");
+        } else {
+            row.classList.add("drag-over-bottom");
+            row.classList.remove("drag-over-top");
+        }
+    });
+
+    row.addEventListener("dragleave", () => {
+        row.classList.remove("drag-over-top", "drag-over-bottom");
+    });
+
+    row.addEventListener("drop", (e) => {
+        if (document.body.dataset.dragType !== "slide-" + type) return;
+        e.preventDefault();
+        const draggedIdx = parseInt(e.dataTransfer.getData("text/plain"));
+        if (isNaN(draggedIdx) || draggedIdx === index) return;
+
+        const rect = row.getBoundingClientRect();
+        const insertAfter = e.clientY >= rect.top + rect.height / 2;
+
+        readFromDom();
+        reorderSlide(draggedIdx, index, insertAfter, type);
+    });
+}
+
+function reorderSlide(draggedIdx, targetIdx, insertAfter, type) {
+    const lesson = currentLesson();
+    let arr;
+    if (type === "cell") arr = lesson.cells;
+    else if (type === "term") arr = lesson.terms;
+    else arr = lesson.slides;
+
+    if (!arr) return;
+
+    const [dragged] = arr.splice(draggedIdx, 1);
+    let newTargetIdx = targetIdx;
+    if (draggedIdx < targetIdx) newTargetIdx--;
+    const insertIdx = insertAfter ? newTargetIdx + 1 : newTargetIdx;
+    arr.splice(insertIdx, 0, dragged);
+
+    if (state.currentSlideIndex === draggedIdx) {
+        state.currentSlideIndex = insertIdx;
+    } else if (state.currentSlideIndex > draggedIdx && state.currentSlideIndex <= insertIdx) {
+        state.currentSlideIndex--;
+    } else if (state.currentSlideIndex < draggedIdx && state.currentSlideIndex >= insertIdx) {
+        state.currentSlideIndex++;
+    }
+
+    if (type === "cell") { renderCellsList(); }
+    else if (type === "term") { renderTermsList(); }
+    else { renderSlideList(); }
+
+    saveDraft();
+    autoSaveToServer();
+}
+
+function moveSlide(index, direction, type) {
+    readFromDom();
+    const lesson = currentLesson();
+    let arr;
+    if (type === "cell") arr = lesson.cells;
+    else if (type === "term") arr = lesson.terms;
+    else arr = lesson.slides;
+
+    if (!arr) return;
+    const ni = index + direction;
+    if (ni < 0 || ni >= arr.length) return;
+    const [item] = arr.splice(index, 1);
+    arr.splice(ni, 0, item);
+
+    if (state.currentSlideIndex === index) state.currentSlideIndex = ni;
+    else if (state.currentSlideIndex === ni) state.currentSlideIndex = index;
+
+    if (type === "cell") { renderCellsList(); }
+    else if (type === "term") { renderTermsList(); }
+    else { renderSlideList(); }
+    saveDraft();
+    autoSaveToServer();
+}
+
+function renderSlide() {
+    const slide = currentLesson().slides[state.currentSlideIndex];
+    if (!slide) return;
+    document.getElementById("slide-shortname-input").value = slide.shortName || "";
+    document.getElementById("slide-title-input").value = slide.title || "";
+    const box = document.getElementById("preview-content");
+    box.innerHTML = "";
+    (slide.content || []).forEach((b, i) => box.appendChild(createBlockElement(b, i, "slide")));
+}
+
+function renderCell() {
+    const lesson = currentLesson();
+    const cell = lesson.cells[state.currentSlideIndex];
+    if (!cell) return;
+    document.getElementById("cell-title-input").value = cell.title || "";
+    const box = document.getElementById("memo-content");
+    box.innerHTML = "";
+    (cell.content || []).forEach((b, i) => box.appendChild(createBlockElement(b, i, "memo")));
+}
+
 function renderTerm() {
     const lesson = currentLesson();
     const term = (lesson.terms || [])[state.currentSlideIndex];
@@ -562,6 +969,18 @@ function renderTerm() {
     const box = document.getElementById("term-content");
     box.innerHTML = "";
     (term.content || []).forEach((b, i) => box.appendChild(createBlockElement(b, i, "glossary")));
+}
+
+function getSortedTermsWithIndexes(lesson) {
+    const arr = (lesson.terms || []).map((term, origIndex) => ({ term, origIndex }));
+    arr.sort((a, b) => {
+        const na = String(a.term.name || "").trim().toLowerCase();
+        const nb = String(b.term.name || "").trim().toLowerCase();
+        if (na < nb) return -1;
+        if (na > nb) return 1;
+        return a.origIndex - b.origIndex;
+    });
+    return arr;
 }
 
 function addTermBlock(type) {
@@ -593,15 +1012,16 @@ function moveTermBlock(btn, dir) {
 /* ============================================================
    CSV ГЛОССАРИЯ — ИМПОРТ И ЭКСПОРТ
    ============================================================ */
-
 function termContentToText(blocks) {
     const lines = [];
     (blocks || []).forEach(b => {
         if (b.type === "p" || b.type === "h3") {
-            const txt = stripHtml(b.text || "").trim();
+            let txt = stripHtml(b.text || "").trim();
+            txt = stripNoteMarkers(txt, b.notes);
             if (txt) lines.push(txt);
         } else if (b.type === "quote") {
-            const txt = stripHtml(b.text || "").trim();
+            let txt = stripHtml(b.text || "").trim();
+            txt = stripNoteMarkers(txt, b.notes);
             if (txt) lines.push(txt);
         } else if (b.type === "ul") {
             (b.items || []).forEach(item => {
@@ -617,6 +1037,18 @@ function termContentToText(blocks) {
         }
     });
     return lines.join("\n");
+}
+
+// Убирает ((N)) из текста и по возможности подставляет само примечание.
+function stripNoteMarkers(text, notes) {
+    if (!text) return "";
+    return String(text).replace(/\(\((\d+)\)\)/g, (m, nStr) => {
+        const n = parseInt(nStr, 10);
+        if (Array.isArray(notes) && n >= 1 && n <= notes.length) {
+            return "[" + notes[n - 1] + "]";
+        }
+        return "";
+    });
 }
 
 function textToTermContent(text) {
@@ -778,8 +1210,7 @@ function processGlossaryCsv(text, fileName) {
     const choice = confirm(
         "Найдено терминов: " + terms.length + ".\n\n" +
         "ОК — ЗАМЕНИТЬ все текущие термины.\n" +
-        "Отмена — ДОБАВИТЬ к существующим.\n\n" +
-        "(Всего в файле: " + (rows.length - startRow) + " строк)"
+        "Отмена — ДОБАВИТЬ к существующим."
     );
 
     readFromDom();
@@ -798,7 +1229,591 @@ function processGlossaryCsv(text, fileName) {
     autoSaveToServer();
 }
 
-/* ===== РЕДАКТОР СПИСКА ===== */
+/* ============================================================
+   WIKI-АВТОКОМПЛИТ
+   ============================================================ */
+function getLessonIcon(type) {
+    if (type === "quiz") return "🧪";
+    if (type === "memo") return "📌";
+    if (type === "glossary") return "📖";
+    return "📄";
+}
+
+function getLessonTypeLabel(type) {
+    if (type === "quiz") return "Тест";
+    if (type === "memo") return "Памятка";
+    if (type === "glossary") return "Глоссарий";
+    return "Теория";
+}
+
+function getWikiAutocompleteItems(query) {
+    const q = String(query || "").toLowerCase().trim();
+    const items = [];
+    for (const id in allLessons) {
+        const lesson = allLessons[id];
+        const title = lesson.title || "Без названия";
+        const matchById = id.toLowerCase().includes(q);
+        const matchByTitle = title.toLowerCase().includes(q);
+        if (!q || matchById || matchByTitle) {
+            items.push({ id, title, type: lesson.type });
+        }
+    }
+    const order = { theory: 0, quiz: 1, memo: 2, glossary: 3 };
+    items.sort((a, b) => {
+        if (order[a.type] !== order[b.type]) return order[a.type] - order[b.type];
+        return a.title.localeCompare(b.title, "ru");
+    });
+    return items;
+}
+
+function getTextBeforeCaret(editable) {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return null;
+    const range = sel.getRangeAt(0);
+    if (!editable.contains(range.startContainer)) return null;
+    const preRange = range.cloneRange();
+    preRange.selectNodeContents(editable);
+    preRange.setEnd(range.startContainer, range.startOffset);
+    return preRange.toString();
+}
+
+function getCaretRect(editable) {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return null;
+    const range = sel.getRangeAt(0);
+    if (!editable.contains(range.startContainer)) return null;
+    let rect = range.getBoundingClientRect();
+    if (!rect || (rect.top === 0 && rect.left === 0 && rect.width === 0)) {
+        const edRect = editable.getBoundingClientRect();
+        return { top: edRect.bottom, left: edRect.left, bottom: edRect.bottom };
+    }
+    return rect;
+}
+
+// Заменяет текст от triggerStart до текущей позиции курсора на replacement.
+// ВАЖНО: сначала вызываем editable.normalize() — это склеивает все соседние
+// текстовые ноды в одну. Без этого setStart/setEnd могут указывать на разные
+// ноды, и Range.deleteContents() удалит не то, что нужно (отсюда были двойные ]].
+function replaceWikiTrigger(editable, triggerStart, replacement) {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+
+    const currentRange = sel.getRangeAt(0);
+    if (!editable.contains(currentRange.startContainer)) return;
+
+    // 1. Склеиваем соседние текстовые ноды
+    try { editable.normalize(); } catch (e) {}
+
+    // Заново берём каретку после normalize
+    const sel2 = window.getSelection();
+    if (!sel2 || sel2.rangeCount === 0) return;
+    const caretRange = sel2.getRangeAt(0);
+    if (!editable.contains(caretRange.startContainer)) return;
+
+    // 2. Ищем text-ноду и позицию triggerStart
+    const walker = document.createTreeWalker(editable, NodeFilter.SHOW_TEXT);
+    let charCount = 0;
+    let startNode = null;
+    let startOffset = 0;
+    let node;
+    while ((node = walker.nextNode())) {
+        const len = node.textContent.length;
+        if (charCount + len > triggerStart) {
+            startNode = node;
+            startOffset = triggerStart - charCount;
+            break;
+        }
+        charCount += len;
+    }
+
+    // Если не нашли — откатываемся на execCommand (крайний случай)
+    if (!startNode) {
+        document.execCommand("insertText", false, replacement);
+        return;
+    }
+
+    // 3. Строим Range от triggerStart до текущей каретки
+    const r = document.createRange();
+    try {
+        r.setStart(startNode, startOffset);
+        r.setEnd(caretRange.endContainer, caretRange.endOffset);
+    } catch (e) {
+        // Не получилось — fallback
+        document.execCommand("insertText", false, replacement);
+        return;
+    }
+
+    // 4. Удаляем и вставляем
+    try {
+        r.deleteContents();
+        const textNode = document.createTextNode(replacement);
+        r.insertNode(textNode);
+
+        // Курсор — после вставленного текста
+        const newRange = document.createRange();
+        newRange.setStart(textNode, replacement.length);
+        newRange.collapse(true);
+        sel2.removeAllRanges();
+        sel2.addRange(newRange);
+    } catch (e) {
+        console.warn("replaceWikiTrigger: не удалось заменить", e);
+        document.execCommand("insertText", false, replacement);
+    }
+}
+
+function initWikiAutocomplete(editable) {
+    let popup = null;
+    let triggerStart = -1;
+    let currentItems = [];
+    let selectedIdx = 0;
+    let ignoreNextInput = false;
+    let isPickingFromPopup = false;
+    let ignoreResetTimer = null;
+
+    function closePopup() {
+        if (popup) { popup.remove(); popup = null; }
+        triggerStart = -1;
+        currentItems = [];
+        selectedIdx = 0;
+    }
+
+    function renderPopup() {
+        if (!popup) return;
+        popup.innerHTML = "";
+
+        if (currentItems.length === 0) {
+            const empty = document.createElement("div");
+            empty.className = "wiki-autocomplete-empty";
+            empty.textContent = "Ничего не найдено";
+            popup.appendChild(empty);
+            return;
+        }
+
+        currentItems.forEach((item, i) => {
+            const el = document.createElement("div");
+            el.className = "wiki-autocomplete-item" + (i === selectedIdx ? " selected" : "");
+            const icon = getLessonIcon(item.type);
+            const typeLabel = getLessonTypeLabel(item.type);
+            el.innerHTML = `<span class="wiki-ac-icon">${icon}</span><span class="wiki-ac-title">${escapeHtml(item.title)}</span><span class="wiki-ac-type">${typeLabel}</span>`;
+            el.onmouseenter = () => {
+                selectedIdx = i;
+                renderPopup();
+            };
+            // Выбор мышью. preventDefault — чтобы editable не потерял фокус
+            // до того, как мы вставим. Плюс флаг, чтобы blur не закрыл попап.
+            const pick = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                isPickingFromPopup = true;
+                setTimeout(() => { isPickingFromPopup = false; }, 0);
+                insertItem(i);
+            };
+            el.onmousedown = pick;
+            el.onpointerdown = pick;
+            popup.appendChild(el);
+        });
+
+        const hint = document.createElement("div");
+        hint.className = "wiki-autocomplete-hint";
+        hint.innerHTML = `<kbd>↑</kbd><kbd>↓</kbd> выбор · <kbd>Enter</kbd> вставить · <kbd>Esc</kbd> отмена`;
+        popup.appendChild(hint);
+    }
+
+    function showPopup(rect) {
+        if (!popup) {
+            popup = document.createElement("div");
+            popup.className = "wiki-autocomplete";
+            document.body.appendChild(popup);
+        }
+        const popupHeight = 300;
+        let top = rect.bottom + 4;
+        let left = rect.left;
+        if (top + popupHeight > window.innerHeight) {
+            top = Math.max(10, rect.top - popupHeight - 4);
+        }
+        if (left + 420 > window.innerWidth) {
+            left = window.innerWidth - 430;
+        }
+        popup.style.top = top + "px";
+        popup.style.left = left + "px";
+        renderPopup();
+    }
+
+    // Вставка выбранного пункта.
+    // ВАЖНО: сначала вставляем (пока triggerStart и currentItems живы),
+    // и только потом закрываем попап. Раньше было наоборот — closePopup()
+    // затирал triggerStart = -1, и insertItem выходил до вставки.
+    function insertItem(idx) {
+        const item = currentItems[idx];
+        if (!item) return;
+        const ts = triggerStart;
+        if (ts < 0) return;
+
+        // Сначала вставляем
+        replaceWikiTrigger(editable, ts, "[[" + item.id + "]]");
+
+        // Потом закрываем и блокируем следующий input
+        closePopup();
+        ignoreNextInput = true;
+        if (ignoreResetTimer) clearTimeout(ignoreResetTimer);
+        ignoreResetTimer = setTimeout(() => { ignoreNextInput = false; }, 300);
+
+        editable.focus();
+        onFieldChange();
+    }
+
+    editable.addEventListener("input", () => {
+        // Игнорируем input после программной вставки
+        if (ignoreNextInput) {
+            ignoreNextInput = false;
+            if (ignoreResetTimer) { clearTimeout(ignoreResetTimer); ignoreResetTimer = null; }
+            return;
+        }
+
+        const beforeText = getTextBeforeCaret(editable);
+        if (beforeText === null) { closePopup(); return; }
+
+        const lastOpen = beforeText.lastIndexOf("[[");
+        if (lastOpen === -1) { closePopup(); return; }
+
+        const afterOpen = beforeText.slice(lastOpen + 2);
+        if (afterOpen.includes("]]") || afterOpen.includes("|") || afterOpen.includes("\n")) {
+            closePopup();
+            return;
+        }
+
+        triggerStart = lastOpen;
+        const query = afterOpen;
+
+        currentItems = getWikiAutocompleteItems(query);
+        selectedIdx = 0;
+
+        const rect = getCaretRect(editable);
+        if (rect) {
+            showPopup(rect);
+        }
+    });
+
+    editable.addEventListener("keydown", (e) => {
+        if (!popup) return;
+        if (e.key === "Escape") {
+            e.preventDefault();
+            closePopup();
+            return;
+        }
+        if (e.key === "ArrowDown") {
+            e.preventDefault();
+            selectedIdx = Math.min(currentItems.length - 1, selectedIdx + 1);
+            renderPopup();
+            return;
+        }
+        if (e.key === "ArrowUp") {
+            e.preventDefault();
+            selectedIdx = Math.max(0, selectedIdx - 1);
+            renderPopup();
+            return;
+        }
+        if (e.key === "Enter") {
+            if (currentItems.length > 0) {
+                e.preventDefault();
+                insertItem(selectedIdx);
+            }
+            return;
+        }
+        if (e.key === "Tab") {
+            if (currentItems.length > 0) {
+                e.preventDefault();
+                insertItem(selectedIdx);
+            }
+            return;
+        }
+    });
+
+    editable.addEventListener("blur", () => {
+        setTimeout(() => {
+            // Если сейчас идёт выбор из попапа — не закрываем
+            if (isPickingFromPopup) return;
+            if (popup && document.activeElement !== editable) closePopup();
+        }, 150);
+    });
+}
+
+/* ============================================================
+   ПРИМЕЧАНИЯ В ТЕКСТЕ — рендер в превью + модалка
+   ============================================================ */
+
+// Превращает ((N)) в <span class="note" data-note-idx="N-1">N</span>.
+// notes — массив строк. Если номера нет в notes — рисуем битый маркер.
+function renderNotesInText(html, notes) {
+    if (!html) return html;
+    return String(html).replace(/\(\((\d+)\)\)/g, (match, nStr) => {
+        const n = parseInt(nStr, 10);
+        if (isNaN(n) || n < 1) {
+            return `<span class="note-broken" title="Некорректный номер">((${escapeHtml(nStr)}))</span>`;
+        }
+        const has = Array.isArray(notes) && n <= notes.length;
+        if (!has) {
+            return `<span class="note-broken" data-note-idx="${n - 1}" title="Нет примечания №${n}">((${n}))</span>`;
+        }
+        return `<span class="note" contenteditable="false" data-note-idx="${n - 1}" title="Кликни, чтобы открыть">${n}</span>`;
+    });
+}
+
+// Из contentEditable забираем innerHTML, но <span class="note">N</span>
+// превращаем обратно в ((N)). Если номер не нашёлся — оставляем текст.
+function extractNoteMarkers(el, notes) {
+    if (!el) return "";
+    const clone = el.cloneNode(true);
+    clone.querySelectorAll("span.note").forEach(sp => {
+        const txt = sp.textContent.trim();
+        const n = parseInt(txt, 10);
+        if (!isNaN(n) && n > 0) {
+            sp.replaceWith(document.createTextNode("((" + n + "))"));
+        } else {
+            sp.replaceWith(document.createTextNode(txt));
+        }
+    });
+    clone.querySelectorAll("span.note-broken").forEach(sp => {
+        sp.replaceWith(document.createTextNode(sp.textContent));
+    });
+    return clone.innerHTML;
+}
+
+let noteModalEl = null;
+
+// Открывает модалку для примечания к выделенному фрагменту в editable.
+function openNoteEditor(editable) {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) {
+        setStatus("Сначала выдели текст, к которому нужно примечание.", "err");
+        return;
+    }
+    const range = sel.getRangeAt(0);
+    if (!editable.contains(range.startContainer)) {
+        setStatus("Выделение вне редактируемого блока.", "err");
+        return;
+    }
+    if (range.collapsed) {
+        setStatus("Сначала выдели фрагмент текста.", "err");
+        return;
+    }
+
+    const wrapper = editable.closest(".block-wrapper");
+    if (!wrapper) return;
+    const blockIndex = parseInt(wrapper.dataset.index, 10);
+    const context = getCurrentContext();
+
+    const block = getBlockByContext(context, blockIndex);
+    if (!block) return;
+
+    if (!Array.isArray(block.notes)) block.notes = [];
+
+    const savedRange = range.cloneRange();
+
+    showNoteModal({
+        initialText: "",
+        onSave: (noteText) => {
+            let noteNum = block.notes.indexOf(noteText);
+            if (noteNum === -1) {
+                block.notes.push(noteText);
+                noteNum = block.notes.length - 1;
+            }
+            const marker = "((" + (noteNum + 1) + "))";
+
+            // Возвращаем фокус и диапазон в editable
+            restoreRange(editable, savedRange);
+
+            // Вставляем маркер через execCommand
+            let inserted = false;
+            try {
+                inserted = document.execCommand("insertText", false, marker);
+            } catch (e) {
+                inserted = false;
+            }
+
+            // Fallback
+            if (!inserted) {
+                try {
+                    const s3 = window.getSelection();
+                    if (s3 && s3.rangeCount > 0) {
+                        const r3 = s3.getRangeAt(0);
+                        r3.collapse(false);
+                        const textNode = document.createTextNode(marker);
+                        r3.insertNode(textNode);
+                        r3.setStartAfter(textNode);
+                        r3.collapse(true);
+                        s3.removeAllRanges();
+                        s3.addRange(r3);
+                    }
+                } catch (e) {
+                    console.warn("openNoteEditor: не удалось вставить маркер", e);
+                }
+            }
+
+            // Сначала читаем DOM в данные, чтобы ((N)) не потерялось
+            readFromDom();
+            // Потом перерисовываем блок — маркер станет подсвеченным
+            rerenderCurrentBlock(context);
+            saveDraft();
+            autoSaveToServer();
+            setStatus("💬 Примечание добавлено", "ok");
+        }
+    });
+}
+
+function restoreRange(editable, range) {
+    editable.focus();
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+}
+
+function getCurrentContext() {
+    const lesson = currentLesson();
+    if (!lesson) return "slide";
+    if (lesson.type === "memo") return "memo";
+    if (lesson.type === "glossary") return "glossary";
+    if (lesson.type === "quiz") return "quiz";
+    return "slide";
+}
+
+function getBlockByContext(context, blockIndex) {
+    const lesson = currentLesson();
+    if (!lesson) return null;
+    if (context === "memo") {
+        const cell = lesson.cells[state.currentSlideIndex];
+        return cell ? cell.content[blockIndex] : null;
+    }
+    if (context === "glossary") {
+        const term = lesson.terms[state.currentSlideIndex];
+        return term ? term.content[blockIndex] : null;
+    }
+    const slide = lesson.slides ? lesson.slides[state.currentSlideIndex] : null;
+    return slide ? slide.content[blockIndex] : null;
+}
+
+function rerenderCurrentBlock(context) {
+    const lesson = currentLesson();
+    if (!lesson) return;
+    if (context === "memo") renderCell();
+    else if (context === "glossary") renderTerm();
+    else renderSlide();
+}
+
+function showNoteModal({ initialText, onSave }) {
+    if (noteModalEl) noteModalEl.remove();
+
+    const overlay = document.createElement("div");
+    overlay.className = "note-modal-overlay";
+    overlay.innerHTML = `
+        <div class="note-modal">
+            <h3 class="note-modal-title">💬 Примечание</h3>
+            <p class="note-modal-hint">Пояснение появится при наведении на выделенный фрагмент.</p>
+            <textarea class="note-modal-textarea" placeholder="Введи текст примечания..."></textarea>
+            <div class="note-modal-actions">
+                <button type="button" class="btn btn-text" data-action="cancel">Отмена</button>
+                <button type="button" class="btn btn-primary" data-action="save">Сохранить</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+    noteModalEl = overlay;
+
+    const ta = overlay.querySelector(".note-modal-textarea");
+    ta.value = initialText || "";
+    ta.focus();
+
+    overlay.querySelector('[data-action="cancel"]').onclick = closeNoteModal;
+    overlay.querySelector('[data-action="save"]').onclick = () => {
+        const text = ta.value.trim();
+        if (!text) {
+            setStatus("Примечание пустое.", "err");
+            return;
+        }
+        closeNoteModal();
+        onSave(text);
+    };
+    overlay.addEventListener("mousedown", (e) => {
+        if (e.target === overlay) closeNoteModal();
+    });
+    ta.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") { e.preventDefault(); closeNoteModal(); }
+        if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            overlay.querySelector('[data-action="save"]').click();
+        }
+    });
+}
+
+function closeNoteModal() {
+    if (noteModalEl) { noteModalEl.remove(); noteModalEl = null; }
+}
+
+/* ============================================================
+   МАРКЕРЫ НА КАРТИНКЕ — модалка редактирования
+   ============================================================ */
+let markerNoteModalEl = null;
+
+function showMarkerNoteModal({ initialText, onSave, onDelete }) {
+    if (markerNoteModalEl) markerNoteModalEl.remove();
+
+    const overlay = document.createElement("div");
+    overlay.className = "note-modal-overlay";
+    overlay.innerHTML = `
+        <div class="note-modal">
+            <h3 class="note-modal-title">🎯 Примечание к маркеру</h3>
+            <p class="note-modal-hint">Появится при клике по маркеру в плеере.</p>
+            <textarea class="note-modal-textarea" placeholder="Введи текст примечания..."></textarea>
+            <div class="note-modal-actions">
+                ${onDelete ? '<button type="button" class="btn btn-text" data-action="delete" style="color:var(--error);">🗑 Удалить</button>' : ''}
+                <button type="button" class="btn btn-text" data-action="cancel">Отмена</button>
+                <button type="button" class="btn btn-primary" data-action="save">Сохранить</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+    markerNoteModalEl = overlay;
+
+    const ta = overlay.querySelector(".note-modal-textarea");
+    ta.value = initialText || "";
+    ta.focus();
+
+    overlay.querySelector('[data-action="cancel"]').onclick = closeMarkerNoteModal;
+    overlay.querySelector('[data-action="save"]').onclick = () => {
+        const text = ta.value.trim();
+        if (!text) {
+            setStatus("Примечание пустое.", "err");
+            return;
+        }
+        closeMarkerNoteModal();
+        onSave(text);
+    };
+    const delBtn = overlay.querySelector('[data-action="delete"]');
+    if (delBtn && onDelete) {
+        delBtn.onclick = () => {
+            closeMarkerNoteModal();
+            onDelete();
+        };
+    }
+    overlay.addEventListener("mousedown", (e) => {
+        if (e.target === overlay) closeMarkerNoteModal();
+    });
+    ta.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") { e.preventDefault(); closeMarkerNoteModal(); }
+        if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            overlay.querySelector('[data-action="save"]').click();
+        }
+    });
+}
+
+function closeMarkerNoteModal() {
+    if (markerNoteModalEl) { markerNoteModalEl.remove(); markerNoteModalEl = null; }
+}
+
+/* ============================================================
+   РЕДАКТОР СПИСКА
+   ============================================================ */
 function createListEditor(block) {
     const wrap = document.createElement("div");
     wrap.className = "list-editor";
@@ -1045,7 +2060,9 @@ function createListEditor(block) {
     return wrap;
 }
 
-/* ===== УТИЛИТЫ ДЛЯ ТАБЛИЦ ===== */
+/* ============================================================
+   УТИЛИТЫ ДЛЯ ТАБЛИЦ
+   ============================================================ */
 function parseHtmlTable(html) {
     if (!html) return null;
     try {
@@ -1126,7 +2143,9 @@ function serializeToTsv(rows) {
     return rows.map(row => row.map(c => String(c == null ? "" : c)).join("\t")).join("\n");
 }
 
-/* ===== РЕДАКТОР ТАБЛИЦЫ ===== */
+/* ============================================================
+   РЕДАКТОР ТАБЛИЦЫ
+   ============================================================ */
 function createTableBody(block) {
     const wrap = document.createElement("div");
     wrap.className = "table-editor";
@@ -1580,7 +2599,9 @@ function getMaxCols(rows) {
     return m;
 }
 
-/* ===== RICH-ПАНЕЛЬ ===== */
+/* ============================================================
+   RICH-ПАНЕЛЬ (🔗 wiki + 💬 примечание)
+   ============================================================ */
 function createRichToolbar(editable) {
     const bar = document.createElement("div");
     bar.className = "rich-toolbar";
@@ -1616,10 +2637,60 @@ function createRichToolbar(editable) {
     bar.appendChild(btn("≡", "По центру", "justifyCenter"));
     bar.appendChild(btn("⯈", "По правому краю", "justifyRight"));
     bar.appendChild(btn("☰", "По ширине", "justifyFull"));
+    bar.appendChild(sep());
+
+    // Кнопка 🔗 — вставить wiki-ссылку
+    const wikiBtn = document.createElement("button");
+    wikiBtn.type = "button";
+    wikiBtn.className = "rich-btn wiki-btn";
+    wikiBtn.textContent = "🔗";
+    wikiBtn.title = "Вставить внутреннюю ссылку на блок (Ctrl+K)";
+    wikiBtn.onmousedown = (e) => {
+        e.preventDefault();
+        editable.focus();
+        insertWikiLinkAtCaret(editable);
+        onFieldChange();
+    };
+    bar.appendChild(wikiBtn);
+
+    // Кнопка 💬 — вставить примечание
+    const noteBtn = document.createElement("button");
+    noteBtn.type = "button";
+    noteBtn.className = "rich-btn note-btn";
+    noteBtn.textContent = "💬";
+    noteBtn.title = "Добавить примечание к выделенному тексту";
+    noteBtn.onmousedown = (e) => {
+        e.preventDefault();
+        openNoteEditor(editable);
+    };
+    bar.appendChild(noteBtn);
 
     return bar;
 }
 
+// Вставляет [[ в позицию каретки, если мы ещё не внутри незакрытой [[.
+function insertWikiLinkAtCaret(editable) {
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    if (!editable.contains(range.startContainer)) return;
+
+    const before = getTextBeforeCaret(editable) || "";
+    const lastOpen = before.lastIndexOf("[[");
+    const lastClose = before.lastIndexOf("]]");
+    if (lastOpen > lastClose) {
+        return;
+    }
+
+    document.execCommand("insertText", false, "[[");
+
+    const inputEvent = new Event("input", { bubbles: true });
+    editable.dispatchEvent(inputEvent);
+}
+
+/* ============================================================
+   БЛОКИ КОНТЕНТА
+   ============================================================ */
 function createBlockElement(block, index, context) {
     const wrapper = document.createElement("div");
     wrapper.className = "block-wrapper";
@@ -1631,16 +2702,16 @@ function createBlockElement(block, index, context) {
     if (block.type === "p") {
         editable = document.createElement("p");
         editable.contentEditable = "true";
-        editable.innerHTML = block.text || "";
+        editable.innerHTML = renderNotesInText(block.text || "", block.notes || []);
     } else if (block.type === "h3") {
         editable = document.createElement("h3");
         editable.contentEditable = "true";
-        editable.innerHTML = block.text || "";
+        editable.innerHTML = renderNotesInText(block.text || "", block.notes || []);
     } else if (block.type === "quote") {
         editable = document.createElement("div");
         editable.className = "quote-text";
         editable.contentEditable = "true";
-        editable.innerHTML = block.text || "";
+        editable.innerHTML = renderNotesInText(block.text || "", block.notes || []);
     } else if (block.type === "ul") {
         editable = createListEditor(block);
     } else if (block.type === "link") {
@@ -1676,10 +2747,29 @@ function createBlockElement(block, index, context) {
         });
         editable.addEventListener("paste", handlePaste);
         wrapper.appendChild(createRichToolbar(editable));
+
+        // Автокомплит wiki-ссылок
+        initWikiAutocomplete(editable);
+
+        // Клик по подсвеченному примечанию → модалка редактирования
+        editable.addEventListener("click", (e) => {
+            const noteEl = e.target.closest(".note");
+            if (!noteEl) return;
+            e.preventDefault();
+            const idx = parseInt(noteEl.dataset.noteIdx, 10);
+            if (isNaN(idx)) return;
+            openNoteEditModal(editable, index, context, idx);
+        });
     }
 
     if (editable) {
         wrapper.appendChild(editable);
+    }
+
+    // Список примечаний под блоком (только для текстовых типов)
+    if ((block.type === "p" || block.type === "h3" || block.type === "quote")) {
+        const notesBox = createNotesListForBlock(block, index, context);
+        if (notesBox) wrapper.appendChild(notesBox);
     }
 
     wrapper.addEventListener("input", onFieldChange);
@@ -1706,6 +2796,7 @@ function createBlockElement(block, index, context) {
 function createMediaBlock(block, type) {
     const wrap = document.createElement("div");
     wrap.className = "media-editor";
+    if (type === "image") wrap.classList.add("img-with-markers");
 
     const isImage = type === "image";
     const uploadType = isImage ? "images" : "videos";
@@ -1731,7 +2822,6 @@ function createMediaBlock(block, type) {
     fileBtn.textContent = "📁 Выбрать файл";
     fileBtn.title = "Выбрать файл с компьютера и загрузить в папку курса";
     srcRow.appendChild(fileBtn);
-
     wrap.appendChild(srcRow);
 
     const fileInput = document.createElement("input");
@@ -1756,31 +2846,56 @@ function createMediaBlock(block, type) {
 
     const hint = document.createElement("div");
     hint.className = "field-hint";
-    hint.innerHTML = isImage
-        ? `Можно: <b>Ctrl+V</b> (вставить из буфера), <b>перетащить файл</b>, или выбрать через кнопку.<br>Файлы кладутся в <code>images/</code> рядом с <code>index.html</code>.`
-        : `Можно: <b>перетащить файл</b> или выбрать через кнопку.<br>Файлы кладутся в <code>videos/</code> рядом с <code>index.html</code>. Формат: MP4 (H.264) или WebM.`;
+    if (isImage) {
+        hint.innerHTML = `Можно: <b>Ctrl+V</b> (вставить из буфера), <b>перетащить файл</b>, или выбрать через кнопку.<br>
+            Файлы кладутся в <code>images/</code> рядом с <code>index.html</code>.<br>
+            <b>Клик по картинке ниже</b> — поставить маркер с примечанием.`;
+    } else {
+        hint.innerHTML = `Можно: <b>перетащить файл</b> или выбрать через кнопку.<br>
+            Файлы кладутся в <code>videos/</code> рядом с <code>index.html</code>. Формат: MP4 (H.264) или WebM.`;
+    }
     wrap.appendChild(hint);
 
     const preview = document.createElement("div");
     preview.className = "media-preview";
     wrap.appendChild(preview);
 
+    let markersBox = null;
+    if (isImage) {
+        markersBox = document.createElement("div");
+        markersBox.className = "img-marker-editor";
+        markersBox.innerHTML = `
+            <div class="img-marker-editor-title">🎯 Маркеры на картинке</div>
+            <div class="img-marker-editor-hint">Клик по картинке — добавить маркер. Клик по существующему маркеру — редактировать. Кнопка ✕ на маркере — удалить.</div>
+        `;
+        const stageWrap = document.createElement("div");
+        stageWrap.className = "img-marker-stage-wrap";
+        markersBox.appendChild(stageWrap);
+
+        const listBox = document.createElement("div");
+        listBox.className = "img-marker-list";
+        markersBox.appendChild(listBox);
+        wrap.appendChild(markersBox);
+
+        markersBox._stageWrap = stageWrap;
+        markersBox._listBox = listBox;
+    }
+
+    if (!Array.isArray(block.markers)) block.markers = [];
+
     const renderPreview = () => {
         preview.innerHTML = "";
         const src = input.value.trim();
         if (!src) {
             preview.innerHTML = '<div class="media-preview-empty">Превью появится здесь</div>';
+            if (markersBox) {
+                markersBox._stageWrap.innerHTML = "";
+                markersBox._listBox.innerHTML = '<div class="img-marker-empty">Сначала добавь картинку.</div>';
+            }
             return;
         }
-        if (isImage) {
-            const img = document.createElement("img");
-            img.alt = "";
-            img.onerror = () => {
-                preview.innerHTML = '<div class="media-preview-error">⚠ Файл не найден: ' + escapeHtml(src) + '</div>';
-            };
-            img.src = src;
-            preview.appendChild(img);
-        } else {
+
+        if (!isImage) {
             const v = document.createElement("video");
             v.controls = true;
             v.preload = "metadata";
@@ -1789,7 +2904,126 @@ function createMediaBlock(block, type) {
             };
             v.src = src;
             preview.appendChild(v);
+            return;
         }
+
+        const img = document.createElement("img");
+        img.alt = "";
+        img.onerror = () => {
+            preview.innerHTML = '<div class="media-preview-error">⚠ Файл не найден: ' + escapeHtml(src) + '</div>';
+            if (markersBox) {
+                markersBox._stageWrap.innerHTML = "";
+                markersBox._listBox.innerHTML = '<div class="img-marker-empty">Картинка не загрузилась.</div>';
+            }
+        };
+        img.src = src;
+        preview.appendChild(img);
+
+        if (markersBox) {
+            const stageWrap = markersBox._stageWrap;
+            stageWrap.innerHTML = "";
+            const stage = document.createElement("div");
+            stage.className = "img-marker-stage";
+            stageWrap.appendChild(stage);
+
+            const stageImg = document.createElement("img");
+            stageImg.src = src;
+            stageImg.alt = "";
+            stage.appendChild(stageImg);
+
+            stage.addEventListener("click", (e) => {
+                if (e.target.closest(".img-marker")) return;
+                const rect = stage.getBoundingClientRect();
+                const xPct = ((e.clientX - rect.left) / rect.width) * 100;
+                const yPct = ((e.clientY - rect.top) / rect.height) * 100;
+                if (xPct < 0 || xPct > 100 || yPct < 0 || yPct > 100) return;
+                showMarkerNoteModal({
+                    initialText: "",
+                    onSave: (text) => {
+                        block.markers.push({
+                            x: Math.round(xPct * 10) / 10,
+                            y: Math.round(yPct * 10) / 10,
+                            text: text
+                        });
+                        renderMarkers();
+                        onFieldChange();
+                    }
+                });
+            });
+
+            renderMarkers(stage);
+        }
+    };
+
+    const renderMarkers = (stage) => {
+        if (!markersBox) return;
+        if (!stage) stage = markersBox._stageWrap.querySelector(".img-marker-stage");
+        if (!stage) return;
+
+        stage.querySelectorAll(".img-marker").forEach(m => m.remove());
+
+        block.markers.forEach((m, i) => {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "img-marker";
+            btn.style.left = m.x + "%";
+            btn.style.top = m.y + "%";
+            btn.title = m.text;
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                showMarkerNoteModal({
+                    initialText: m.text,
+                    onSave: (text) => {
+                        m.text = text;
+                        renderMarkers();
+                        onFieldChange();
+                    },
+                    onDelete: () => {
+                        if (!confirm("Удалить маркер?")) return;
+                        block.markers.splice(i, 1);
+                        renderMarkers();
+                        onFieldChange();
+                    }
+                });
+            };
+            stage.appendChild(btn);
+        });
+
+        const listBox = markersBox._listBox;
+        listBox.innerHTML = "";
+        if (block.markers.length === 0) {
+            listBox.innerHTML = '<div class="img-marker-empty">Маркеров пока нет. Кликни по картинке выше.</div>';
+            return;
+        }
+        block.markers.forEach((m, i) => {
+            const row = document.createElement("div");
+            row.className = "img-marker-item";
+            row.innerHTML = `
+                <div class="img-marker-item-num">${i + 1}</div>
+                <div class="img-marker-item-text">${escapeHtml(m.text)}</div>
+                <div class="img-marker-item-actions">
+                    <button type="button" class="mini-icon-btn" title="Редактировать">✎</button>
+                    <button type="button" class="mini-icon-btn del" title="Удалить">✕</button>
+                </div>
+            `;
+            row.querySelectorAll("button")[0].onclick = () => {
+                showMarkerNoteModal({
+                    initialText: m.text,
+                    onSave: (text) => {
+                        m.text = text;
+                        renderMarkers();
+                        onFieldChange();
+                    }
+                });
+            };
+            row.querySelectorAll("button")[1].onclick = () => {
+                if (!confirm("Удалить маркер?")) return;
+                block.markers.splice(i, 1);
+                renderMarkers();
+                onFieldChange();
+            };
+            listBox.appendChild(row);
+        });
     };
 
     const setSrc = (newSrc) => {
@@ -1933,23 +3167,38 @@ function escapeHtml(s) {
     }[c]));
 }
 
+// ============================================================
+// БЕЗОПАСНАЯ САНИТАЦИЯ HTML
+// Разрешаем только теги из белого списка и только безопасные атрибуты.
+// Все обработчики событий (onclick, onmouseover и т.п.) удаляются.
+// style оставляем только с text-align.
+// ============================================================
 function sanitizeHtml(html) {
     if (html == null) return "";
     let s = String(html);
 
+    // 0. Удаляем HTML-комментарии <!-- ... --> (артефакты Word/Google Docs)
+    s = s.replace(/<!--[\s\S]*?-->/g, "");
+
+    // 1. Вырезаем опасные теги вместе с содержимым
     s = s.replace(/<(script|style|iframe|object|embed|svg|math)[^>]*>[\s\S]*?<\/\1>/gi, "");
     s = s.replace(/<(script|style|iframe|object|embed|svg|math)[^>]*\/?>/gi, "");
 
+    // 2. Нормализуем <br> и &nbsp;
     s = s.replace(/<br\s*\/?>/gi, "<br>");
     s = s.replace(/&nbsp;/gi, " ");
 
     const allowed = /^(strong|b|em|i|u|s|strike|del|br|span|div|p)$/i;
+
+    // 3. Пробегаем по всем тегам
     s = s.replace(/<\/?([a-zA-Z][a-zA-Z0-9]*)\b([^>]*)>/g, function(match, tagName, attrs) {
         const tag = tagName.toLowerCase();
         if (!allowed.test(tag)) return "";
+
         const isClosing = match.charAt(1) === "/";
         if (isClosing) return "</" + tag + ">";
 
+        // Разрешаем только style с text-align, никаких других атрибутов
         let safeAttrs = "";
         const styleMatch = attrs.match(/style\s*=\s*["']([^"']*)["']/i);
         if (styleMatch) {
@@ -1961,6 +3210,7 @@ function sanitizeHtml(html) {
         return "<" + tag + safeAttrs + ">";
     });
 
+    // 4. Схлопываем пробелы
     s = s.replace(/[ \t]+/g, " ");
     s = s.trim();
     return s;
@@ -2020,7 +3270,7 @@ function makeNewBlock(type) {
     };
     if (type === "quote") return { type: "quote", text: "Выделенная мысль" };
     if (type === "link") return { type: "link", text: "Текст ссылки", href: "https://" };
-    if (type === "image") return { type: "image", src: "", alt: "" };
+    if (type === "image") return { type: "image", src: "", alt: "", markers: [] };
     if (type === "video") return { type: "video", src: "" };
     if (type === "table") return {
         type: "table",
@@ -2689,9 +3939,7 @@ function removeOption(btn) {
     renderQuizEditor(lesson); saveDraft();
 }
 
-/* ============================================================
-   ЧТЕНИЕ contentEditable-БЛОКОВ В ОБЪЕКТ
-   ============================================================ */
+/* ===== ЧТЕНИЕ contentEditable ===== */
 function readEditableBlocks(containerId, blocks) {
     const container = document.getElementById(containerId);
     if (!container || !Array.isArray(blocks)) return;
@@ -2702,10 +3950,14 @@ function readEditableBlocks(containerId, blocks) {
         if (!b) return;
         if (b.type === "p" || b.type === "h3") {
             const el = w.querySelector("p, h3");
-            if (el) b.text = sanitizeHtml(el.innerHTML);
+            if (el) {
+                b.text = sanitizeHtml(extractNoteMarkers(el, b.notes || []));
+            }
         } else if (b.type === "quote") {
             const el = w.querySelector(".quote-text");
-            if (el) b.text = sanitizeHtml(el.innerHTML);
+            if (el) {
+                b.text = sanitizeHtml(extractNoteMarkers(el, b.notes || []));
+            }
         } else if (b.type === "link") {
             const textEl = w.querySelector(".link-text");
             const urlEl = w.querySelector(".link-url");
@@ -2784,7 +4036,7 @@ function onCourseSettingsChange() {
 function saveDraft() { try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ allLessons, courseSettings })); } catch(e){} }
 
 /* ============================================================
-   АВТОСОХРАНЕНИЕ В data.js (при запущенном сервере)
+   АВТОСОХРАНЕНИЕ В data.js
    ============================================================ */
 let autoSaveInFlight = false;
 let autoSavePending = false;
@@ -2798,7 +4050,7 @@ async function autoSaveToServer() {
 
     try {
         const content = buildDataJs();
-        const res = await fetch("/save-data", {
+        const res = await fetchWithTimeout("/save-data", {
             method: "POST",
             headers: { "Content-Type": "text/javascript; charset=utf-8" },
             body: content
@@ -2874,6 +4126,7 @@ function addLesson(type) {
     }
     state.currentLessonId = key; state.currentSlideIndex = 0;
     refreshAll(); saveDraft();
+    autoSaveToServer();
 }
 
 function deleteLesson() {
@@ -2883,6 +4136,7 @@ function deleteLesson() {
     delete allLessons[state.currentLessonId];
     state.currentLessonId = Object.keys(allLessons)[0]; state.currentSlideIndex = 0;
     refreshAll(); saveDraft();
+    autoSaveToServer();
 }
 
 function exportLesson(id) {
@@ -2989,6 +4243,7 @@ function importLesson() {
                 state.currentSlideIndex = 0;
                 refreshAll();
                 saveDraft();
+                autoSaveToServer();
                 const renamed = finalKey !== baseKey ? " (переименован в " + finalKey + ")" : "";
                 setStatus("📥 Импортирован блок: " + lesson.title + renamed, "ok");
             } catch (e) {
@@ -3062,6 +4317,7 @@ function importCourse() {
                 state.currentSlideIndex = 0;
                 refreshAll();
                 saveDraft();
+                autoSaveToServer();
                 setStatus("📥 Курс импортирован. Прогресс очищен.", "ok");
             } catch (e) {
                 setStatus("Ошибка чтения файла: " + e.message, "err");
@@ -3082,6 +4338,9 @@ function downloadJson(filename, obj) {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+/* ============================================================
+   ПРЕДПРОСМОТР
+   ============================================================ */
 function openPreview() {
     readFromDom();
     const lesson = currentLesson();
@@ -3201,10 +4460,10 @@ function renderPreviewList(b) {
 function renderPreviewMemoBlocks(blocks) {
     let html = "";
     (blocks || []).forEach(b => {
-        if (b.type === "p") html += `<p>${b.text || ""}</p>`;
-        else if (b.type === "h3") html += `<h3>${b.text || ""}</h3>`;
+        if (b.type === "p") html += `<p>${renderNotesInText(b.text || "", b.notes || [])}</p>`;
+        else if (b.type === "h3") html += `<h3>${renderNotesInText(b.text || "", b.notes || [])}</h3>`;
         else if (b.type === "ul") html += renderPreviewList(b);
-        else if (b.type === "quote") html += `<div class="quote">${b.text || ""}</div>`;
+        else if (b.type === "quote") html += `<div class="quote">${renderNotesInText(b.text || "", b.notes || [])}</div>`;
         else if (b.type === "link") html += `<div class="pv-link-block"><a class="pv-slide-link" href="javascript:void(0)">🔗 ${b.text || "Ссылка"}</a></div>`;
         else if (b.type === "image" && b.src) html += `<div class="slide-media"><img src="${b.src}" alt=""></div>`;
         else if (b.type === "video" && b.src) html += `<div class="slide-media"><video src="${b.src}" controls preload="metadata"></video></div>`;
@@ -3307,10 +4566,10 @@ function renderPreviewSlide(lesson, slide) {
     html += `<h2 class="pv-slide-title">${slide.title || "(без заголовка)"}</h2>`;
     html += `<div class="pv-slide-content">`;
     (slide.content || []).forEach(b => {
-        if (b.type === "p") html += `<p>${b.text || ""}</p>`;
-        else if (b.type === "h3") html += `<h3>${b.text || ""}</h3>`;
+        if (b.type === "p") html += `<p>${renderNotesInText(b.text || "", b.notes || [])}</p>`;
+        else if (b.type === "h3") html += `<h3>${renderNotesInText(b.text || "", b.notes || [])}</h3>`;
         else if (b.type === "ul") html += renderPreviewList(b);
-        else if (b.type === "quote") html += `<div class="quote">${b.text || ""}</div>`;
+        else if (b.type === "quote") html += `<div class="quote">${renderNotesInText(b.text || "", b.notes || [])}</div>`;
         else if (b.type === "link") {
             const isInternal = (b.href || "").startsWith("#");
             html += `<div class="pv-link-block"><a class="pv-slide-link${isInternal ? ' internal' : ''}" href="javascript:void(0)">🔗 ${b.text || "Ссылка"}</a></div>`;
@@ -3590,11 +4849,14 @@ function pvRestart() {
     renderPreview();
 }
 
+/* ============================================================
+   СБОРКА data.js
+   ============================================================ */
 function buildDataJs() {
     readFromDom();
-    const sJ = JSON.stringify(courseSettings, null, 4);
-    const lJ = JSON.stringify(allLessons, null, 4);
-    return "// ============================================================\n// ДАННЫЕ КУРСА\n// Редактируется через admin.html.\n// courseKey — уникальный ключ курса, не менять!\n// Типы блоков: lesson.type = \"theory\" | \"quiz\" | \"memo\" | \"glossary\".\n// Тип вопроса: q.type = \"single\" | \"multi\" | \"match\" | \"card\".\n// single/multi: { text, options, correct: [массив], explain, group }\n// match:        { text, pairs: [{left, right}], explain?, group }\n// card:         { front, frontImage, back, backImage, group }\n// memo:         { title, cells: [{ title, content: [...] }] }\n// glossary:     { title, terms: [{ name, content: [...] }] }\n// table:        { type: \"table\", header: bool, rows: [[...], [...]] }\n// ul:           { type: \"ul\", style: \"bullet\"|\"number\"|\"checkbox\", items: [{text, level}] }\n// randomizeQuestions / randomizeOptions — перемешивание.\n// Контент слайдов/ячеек/терминов: блоки p, h3, ul, quote, link, image, video, table.\n// В p/h3/quote допустимы <b>, <i>, <u>, <s> и style=\"text-align:...\".\n// ============================================================\n\n" +
+    const sJ = safeJsonStringify(courseSettings);
+    const lJ = safeJsonStringify(allLessons);
+    return "// ============================================================\n// ДАННЫЕ КУРСА\n// Редактируется через admin.html.\n// courseKey — уникальный ключ курса, не менять!\n// Типы блоков: lesson.type = \"theory\" | \"quiz\" | \"memo\" | \"glossary\".\n// Тип вопроса: q.type = \"single\" | \"multi\" | \"match\" | \"card\".\n// single/multi: { text, options, correct: [массив], explain, group }\n// match:        { text, pairs: [{left, right}], explain?, group }\n// card:         { front, frontImage, back, backImage, group }\n// memo:         { title, cells: [{ title, content: [...] }] }\n// glossary:     { title, terms: [{ name, content: [...] }] }\n// table:        { type: \"table\", header: bool, rows: [[...], [...]] }\n// ul:           { type: \"ul\", style: \"bullet\"|\"number\"|\"checkbox\", items: [{text, level}] }\n// randomizeQuestions / randomizeOptions — перемешивание.\n// Контент слайдов/ячеек/терминов: блоки p, h3, ul, quote, link, image, video, table.\n// В p/h3/quote допустимы <b>, <i>, <u>, <s> и style=\"text-align:...\".\n// В тексте можно использовать [[ключ_блока]] для внутренних ссылок.\n// ============================================================\n\n" +
            "const courseSettings = " + sJ + ";\n\n" +
            "const allLessons = " + lJ + ";\n";
 }
@@ -3602,7 +4864,7 @@ function buildDataJs() {
 async function saveToFile() {
     const content = buildDataJs();
     try {
-        const res = await fetch("/save-data", {
+        const res = await fetchWithTimeout("/save-data", {
             method: "POST",
             headers: { "Content-Type": "text/javascript; charset=utf-8" },
             body: content
@@ -3643,6 +4905,9 @@ function setStatus(t, type) {
     setTimeout(() => el.classList.remove("show"), 6000);
 }
 
+/* ============================================================
+   CSV ШАБЛОНЫ И ИМПОРТ В ТЕСТ
+   ============================================================ */
 const CSV_TEMPLATES = {
     "single_multi": {
         filename: "template_single_multi.csv",
@@ -3675,30 +4940,19 @@ const CSV_TEMPLATES = {
 function openCsvTemplates() {
     const body = document.getElementById("csv-modal-body");
     let html = `<h2>📄 Шаблоны CSV</h2>`;
-    html += `<p class="csv-modal-desc">Скачай нужный шаблон, открой в Excel, заполни и сохрани в формате CSV (разделитель — точка с запятой). Потом загрузи его в разделе «📥 Импорт из CSV».</p>`;
-
+    html += `<p class="csv-modal-desc">Скачай нужный шаблон, открой в Excel, заполни и сохрани в формате CSV (разделитель — точка с запятой).</p>`;
     html += `<div class="csv-samples">`;
     html += `<div class="csv-samples-title">Что в шаблоне</div>`;
     html += `<div class="csv-samples-item"><strong>single_multi</strong> — вопросы с одним или несколькими правильными ответами.</div>`;
     html += `<div class="csv-samples-item"><strong>match</strong> — вопросы на соответствие. До 5 пар.</div>`;
     html += `<div class="csv-samples-item"><strong>card</strong> — карточки для запоминания.</div>`;
     html += `</div>`;
-
-    html += `<div class="csv-samples">`;
-    html += `<div class="csv-samples-title">Правила заполнения</div>`;
-    html += `<div class="csv-samples-item">Разделитель — <strong>точка с запятой</strong> <code>;</code>.</div>`;
-    html += `<div class="csv-samples-item">Для multi правильные ответы — через <code>|</code>, например <code>A|E</code>.</div>`;
-    html += `<div class="csv-samples-item">Пустые ячейки — можно. Для match, если пара пустая — она не считается.</div>`;
-    html += `<div class="csv-samples-item">Кодировка: сохраняй как <strong>CSV UTF-8</strong>.</div>`;
-    html += `</div>`;
-
     html += `<div class="csv-modal-actions">`;
     html += `<button class="btn btn-outline" onclick="downloadCsvTemplate('single_multi')">📥 single/multi</button>`;
     html += `<button class="btn btn-outline" onclick="downloadCsvTemplate('match')">📥 match</button>`;
     html += `<button class="btn btn-outline" onclick="downloadCsvTemplate('card')">📥 card</button>`;
     html += `<button class="btn btn-text" onclick="closeCsvModal()">Закрыть</button>`;
     html += `</div>`;
-
     body.innerHTML = html;
     document.getElementById("csv-overlay").classList.add("show");
 }
@@ -3867,7 +5121,7 @@ function openCsvImport() {
 function renderCsvImportStep1() {
     const body = document.getElementById("csv-modal-body");
     let html = `<h2>📥 Импорт вопросов из CSV</h2>`;
-    html += `<p class="csv-modal-desc">Выбери тип вопросов в файле. Или нажми «Определить автоматически» — мы посмотрим на заголовки.</p>`;
+    html += `<p class="csv-modal-desc">Выбери тип вопросов в файле. Или нажми «Определить автоматически».</p>`;
     html += `<div class="csv-type-grid">`;
     html += `<button class="csv-type-card" onclick="csvPickType('single_multi')">`;
     html += `<div class="csv-type-icon">✏</div>`;
@@ -3951,7 +5205,6 @@ function renderCsvImportStep2() {
 
     let html = `<h2>📥 Импорт: проверка</h2>`;
     html += `<p class="csv-modal-desc">Файл: <strong>${escapeHtml(st.fileName)}</strong> · Тип: ${escapeHtml(st.kindLabel)}</p>`;
-
     html += `<div class="csv-preview">`;
     html += `<div class="csv-preview-row"><span>Всего строк</span><strong>${total}</strong></div>`;
     html += `<div class="csv-preview-row"><span class="csv-preview-ok">✓ Валидных</span><strong class="csv-preview-ok">${st.questions.length}</strong></div>`;
@@ -4060,6 +5313,10 @@ document.addEventListener("keydown", e => {
         if (document.getElementById("csv-overlay").classList.contains("show")) {
             closeCsvModal();
         }
+        const ctx1 = document.getElementById("lesson-ctx-menu");
+        if (ctx1) ctx1.remove();
+        const ctx2 = document.getElementById("slide-ctx-menu");
+        if (ctx2) ctx2.remove();
     }
     if (e.key === "d" && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
         const t = e.target;
@@ -4068,6 +5325,208 @@ document.addEventListener("keydown", e => {
         e.preventDefault();
         if (currentLesson()) duplicateSlide();
     }
+    if (e.key === "k" && (e.ctrlKey || e.metaKey)) {
+        const t = e.target;
+        if (t && t.isContentEditable) {
+            e.preventDefault();
+            insertWikiLinkAtCaret(t);
+            onFieldChange();
+        }
+    }
 });
+
+/* ============================================================
+   ПРИМЕЧАНИЯ В ТЕКСТЕ — список под блоком + модалка редактирования
+   ============================================================ */
+
+function isNoteUsedInText(block, noteIdx) {
+    if (!block || !block.text) return false;
+    const marker = "((" + (noteIdx + 1) + "))";
+    return String(block.text).indexOf(marker) !== -1;
+}
+
+function createNotesListForBlock(block, blockIndex, context) {
+    const notes = Array.isArray(block.notes) ? block.notes : [];
+    if (notes.length === 0) return null;
+
+    const wrap = document.createElement("div");
+    wrap.className = "block-notes";
+
+    const title = document.createElement("div");
+    title.className = "block-notes-title";
+    title.textContent = "💬 Примечания к блоку";
+    wrap.appendChild(title);
+
+    const list = document.createElement("div");
+    list.className = "block-notes-list";
+
+    notes.forEach((noteText, idx) => {
+        const row = document.createElement("div");
+        row.className = "block-notes-item";
+        if (!isNoteUsedInText(block, idx)) row.classList.add("is-unused");
+
+        const num = document.createElement("div");
+        num.className = "block-notes-num";
+        num.textContent = String(idx + 1);
+        row.appendChild(num);
+
+        const text = document.createElement("div");
+        text.className = "block-notes-text";
+        text.textContent = noteText;
+        row.appendChild(text);
+
+        if (!isNoteUsedInText(block, idx)) {
+            const badge = document.createElement("span");
+            badge.className = "block-notes-unused-badge";
+            badge.textContent = "удалено из текста";
+            row.appendChild(badge);
+        }
+
+        const actions = document.createElement("div");
+        actions.className = "block-notes-actions";
+
+        const editBtn = document.createElement("button");
+        editBtn.type = "button";
+        editBtn.className = "mini-icon-btn";
+        editBtn.title = "Редактировать";
+        editBtn.textContent = "✎";
+        editBtn.onclick = (e) => {
+            e.stopPropagation();
+            const wrapper = list.closest(".block-wrapper") || editBtn.closest(".block-wrapper");
+            const editable = wrapper ? wrapper.querySelector("p, h3, .quote-text") : null;
+            if (!editable) return;
+            openNoteEditModal(editable, blockIndex, context, idx);
+        };
+        actions.appendChild(editBtn);
+
+        const delBtn = document.createElement("button");
+        delBtn.type = "button";
+        delBtn.className = "mini-icon-btn del";
+        delBtn.title = "Удалить";
+        delBtn.textContent = "✕";
+        delBtn.onclick = (e) => {
+            e.stopPropagation();
+            if (!confirm("Удалить примечание №" + (idx + 1) + "? Все ссылки ((N)) в тексте станут битыми.")) return;
+            deleteNoteFromBlock(block, blockIndex, context, idx);
+        };
+        actions.appendChild(delBtn);
+
+        row.appendChild(actions);
+        list.appendChild(row);
+    });
+
+    wrap.appendChild(list);
+    return wrap;
+}
+
+function refreshBlockAndNotes(block, blockIndex, context) {
+    readEditableBlocks(
+        context === "memo" ? "memo-content" :
+        context === "glossary" ? "term-content" : "preview-content",
+        context === "memo" ? currentLesson().cells[state.currentSlideIndex].content :
+        context === "glossary" ? currentLesson().terms[state.currentSlideIndex].content :
+        currentLesson().slides[state.currentSlideIndex].content
+    );
+    if (context === "memo") renderCell();
+    else if (context === "glossary") renderTerm();
+    else renderSlide();
+    saveDraft();
+    autoSaveToServer();
+}
+
+function deleteNoteFromBlock(block, blockIndex, context, idx) {
+    if (!Array.isArray(block.notes)) return;
+    block.notes.splice(idx, 1);
+    refreshBlockAndNotes(block, blockIndex, context);
+    setStatus("🗑 Примечание удалено", "ok");
+}
+
+function openNoteEditModal(editable, blockIndex, context, noteIdx) {
+    const block = getBlockByContext(context, blockIndex);
+    if (!block) return;
+    if (!Array.isArray(block.notes)) block.notes = [];
+    if (noteIdx < 0 || noteIdx >= block.notes.length) return;
+
+    if (noteEditModalEl) noteEditModalEl.remove();
+
+    const overlay = document.createElement("div");
+    overlay.className = "note-modal-overlay";
+
+    let listHtml = "";
+    block.notes.forEach((t, i) => {
+        const isCurrent = i === noteIdx;
+        const used = isNoteUsedInText(block, i);
+        const cls = "note-modal-list-item" + (isCurrent ? " is-current" : "") + (!used ? " is-unused" : "");
+        listHtml += `<div class="${cls}" data-idx="${i}">` +
+            `<span class="note-modal-list-num">${i + 1}</span>` +
+            `<span class="note-modal-list-text">${escapeHtml(t)}</span>` +
+            (!used ? `<span class="note-modal-list-badge">удалено</span>` : "") +
+            `</div>`;
+    });
+
+    overlay.innerHTML = `
+        <div class="note-modal note-modal-wide">
+            <h3 class="note-modal-title">💬 Примечание №${noteIdx + 1}</h3>
+            <p class="note-modal-hint">Текст примечания. Появится при наведении на маркер в тексте.</p>
+            <textarea class="note-modal-textarea" placeholder="Введи текст примечания..."></textarea>
+            <div class="note-modal-actions">
+                <button type="button" class="btn btn-text" data-action="delete" style="color:var(--error);">🗑 Удалить</button>
+                <button type="button" class="btn btn-text" data-action="cancel">Отмена</button>
+                <button type="button" class="btn btn-primary" data-action="save">Сохранить</button>
+            </div>
+            <div class="note-modal-list-title">Все примечания этого блока:</div>
+            <div class="note-modal-list">${listHtml}</div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+    noteEditModalEl = overlay;
+
+    const ta = overlay.querySelector(".note-modal-textarea");
+    ta.value = block.notes[noteIdx] || "";
+    ta.focus();
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+
+    overlay.querySelectorAll(".note-modal-list-item").forEach(item => {
+        item.onclick = () => {
+            const i = parseInt(item.dataset.idx, 10);
+            if (isNaN(i) || i === noteIdx) return;
+            closeNoteEditModal();
+            openNoteEditModal(editable, blockIndex, context, i);
+        };
+    });
+
+    overlay.querySelector('[data-action="cancel"]').onclick = closeNoteEditModal;
+    overlay.querySelector('[data-action="delete"]').onclick = () => {
+        if (!confirm("Удалить примечание №" + (noteIdx + 1) + "?")) return;
+        closeNoteEditModal();
+        deleteNoteFromBlock(block, blockIndex, context, noteIdx);
+    };
+    overlay.querySelector('[data-action="save"]').onclick = () => {
+        const text = ta.value.trim();
+        if (!text) {
+            setStatus("Примечание пустое.", "err");
+            return;
+        }
+        block.notes[noteIdx] = text;
+        closeNoteEditModal();
+        refreshBlockAndNotes(block, blockIndex, context);
+        setStatus("💬 Примечание обновлено", "ok");
+    };
+    overlay.addEventListener("mousedown", (e) => {
+        if (e.target === overlay) closeNoteEditModal();
+    });
+    ta.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") { e.preventDefault(); closeNoteEditModal(); }
+        if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            overlay.querySelector('[data-action="save"]').click();
+        }
+    });
+}
+
+let noteEditModalEl = null;
+function closeNoteEditModal() {
+    if (noteEditModalEl) { noteEditModalEl.remove(); noteEditModalEl = null; }
+}
 
 init();

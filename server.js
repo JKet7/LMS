@@ -1,8 +1,8 @@
 /* ============================================================
    server.js — локальный сервер для конструктора курсов
    Запуск: node server.js
-   Открыть: http://localhost:3000/courses.html
-   С телефона: http://<IP-компьютера>:3000/courses.html
+   Открыть: http://localhost:3000/index.html
+   С телефона: http://<IP-компьютера>:3000/index.html
    ============================================================ */
 
 const http = require("http");
@@ -43,6 +43,12 @@ const MIME = {
     ".txt":  "text/plain; charset=utf-8"
 };
 
+// Белый список расширений для загрузки медиа
+const ALLOWED_UPLOAD_EXTS = new Set([
+    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg",
+    ".mp4", ".webm", ".ogg"
+]);
+
 function send(res, code, body, contentType) {
     res.writeHead(code, {
         "Content-Type": contentType || "text/plain; charset=utf-8",
@@ -54,10 +60,13 @@ function send(res, code, body, contentType) {
 }
 
 // Нормализация пути + защита от выхода за ROOT.
+// ВАЖНО: проверяем b === a ИЛИ b начинается с a + path.sep.
+// Иначе "C:\A\BC" проходит как "внутри" "C:\A" (потому что "C:\A\BC".startsWith("C:\A") === true).
 function safeJoin(root, target) {
     const a = path.resolve(root).normalize("NFC");
     const b = path.resolve(root, target).normalize("NFC");
-    if (!b.startsWith(a)) return null;
+    if (b === a) return b;
+    if (!b.startsWith(a + path.sep)) return null;
     return b;
 }
 
@@ -72,6 +81,15 @@ function getCourseFromReferer(referer) {
         }
     } catch (e) {}
     return null;
+}
+
+// Минимальная проверка, что тело — похоже на data.js, а не на что попало.
+function looksLikeDataJs(body) {
+    if (!body || typeof body !== "string") return false;
+    if (body.length < 20) return false;
+    const hasSettings = body.indexOf("const courseSettings") !== -1;
+    const hasLessons = body.indexOf("const allLessons") !== -1;
+    return hasSettings && hasLessons;
 }
 
 const server = http.createServer((req, res) => {
@@ -104,13 +122,31 @@ const server = http.createServer((req, res) => {
         }
 
         let body = "";
+        let aborted = false;
         req.on("data", chunk => {
+            if (aborted) return;
             body += chunk;
-            if (body.length > 50 * 1024 * 1024) req.destroy();
+            if (body.length > 50 * 1024 * 1024) {
+                aborted = true;
+                req.destroy();
+                if (!res.headersSent) send(res, 413, "Тело запроса слишком большое");
+            }
         });
-        req.on("end", () => {
+        req.on("error", (e) => {
+            console.error("Ошибка чтения тела /save-data:", e);
+            if (!res.headersSent) send(res, 500, "Ошибка чтения тела: " + e.message);
+        });
+        req.on("end", async () => {
+            if (aborted) return;
+
+            if (!looksLikeDataJs(body)) {
+                console.warn(`⚠ Отклонено /save-data для ${course}: тело не похоже на data.js`);
+                send(res, 400, "Тело не похоже на data.js (нет const courseSettings или const allLessons).");
+                return;
+            }
+
             try {
-                fs.writeFileSync(filePath, body, "utf-8");
+                await fs.promises.writeFile(filePath, body, "utf-8");
                 console.log(`✓ Сохранено: ${course}/data.js (${body.length} байт)`);
                 send(res, 200, "ok");
             } catch (e) {
@@ -120,6 +156,7 @@ const server = http.createServer((req, res) => {
         });
         return;
     }
+
     // ===== POST /upload — загрузка файла (картинка/видео) =====
     if (req.method === "POST" && reqUrl.pathname === "/upload") {
         const course = reqUrl.searchParams.get("course");
@@ -135,8 +172,16 @@ const server = http.createServer((req, res) => {
             return;
         }
 
-        // Защита: только буквы, цифры, точки, дефисы, подчёркивания, пробелы
         const safeName = String(filename).replace(/[^a-zA-Zа-яА-Я0-9._\-\s]/g, "_");
+
+        // Проверка расширения — только белый список
+        const extLower = path.extname(safeName).toLowerCase();
+        if (!ALLOWED_UPLOAD_EXTS.has(extLower)) {
+            send(res, 400, "Недопустимое расширение файла: " + (extLower || "(без расширения)") +
+                           ". Разрешены: " + Array.from(ALLOWED_UPLOAD_EXTS).join(", "));
+            return;
+        }
+
         const courseDir = safeJoin(ROOT, course);
         if (!courseDir || !fs.existsSync(courseDir)) {
             send(res, 404, "Папка курса не найдена: " + course);
@@ -162,6 +207,7 @@ const server = http.createServer((req, res) => {
             while (fs.existsSync(finalPath)) {
                 finalName = base + "_" + n + ext;
                 finalPath = safeJoin(targetDir, finalName);
+                if (!finalPath) { send(res, 403, "Недопустимое имя файла"); return; }
                 n++;
                 if (n > 1000) { send(res, 500, "Слишком много дубликатов"); return; }
             }
@@ -169,7 +215,15 @@ const server = http.createServer((req, res) => {
 
         const writeStream = fs.createWriteStream(finalPath);
         let received = 0;
-        req.on("data", chunk => { received += chunk.length; });
+        req.on("data", chunk => {
+            received += chunk.length;
+            if (received > 200 * 1024 * 1024) {
+                req.destroy();
+                writeStream.destroy();
+                try { fs.unlinkSync(finalPath); } catch (e) {}
+                if (!res.headersSent) send(res, 413, "Файл слишком большой");
+            }
+        });
         req.on("end", () => {
             writeStream.end();
             console.log(`✓ Загружено: ${course}/${type}/${finalName} (${received} байт)`);
@@ -181,11 +235,13 @@ const server = http.createServer((req, res) => {
         req.on("error", (e) => {
             console.error("Ошибка загрузки:", e);
             writeStream.destroy();
+            try { fs.unlinkSync(finalPath); } catch (err) {}
             if (!res.headersSent) send(res, 500, "Ошибка загрузки: " + e.message);
         });
         req.pipe(writeStream);
         return;
     }
+
     // ===== GET /ping =====
     if (req.method === "GET" && reqUrl.pathname === "/ping") {
         send(res, 200, "pong");
@@ -193,14 +249,22 @@ const server = http.createServer((req, res) => {
     }
 
     // ===== favicon — без 403 =====
-    let pathname = decodeURIComponent(reqUrl.pathname);
+    let pathname;
+    try {
+        pathname = decodeURIComponent(reqUrl.pathname);
+    } catch (e) {
+        send(res, 400, "Некорректный URL");
+        return;
+    }
+
     if (pathname === "/favicon.ico") {
         res.writeHead(204);
         res.end();
         return;
     }
 
-    if (pathname === "/") pathname = "/courses.html";
+    // Корень → index.html (единая точка входа, работает и на GitHub Pages)
+    if (pathname === "/") pathname = "/index.html";
 
     // Убираем ведущий слэш для safeJoin (path.resolve его сам понимает)
     const filePath = safeJoin(ROOT, pathname.replace(/^\/+/, ""));
@@ -239,24 +303,24 @@ server.on("error", (e) => {
 
 server.listen(PORT, "0.0.0.0", () => {
     // Диагностика
-    const coursesHtml = path.join(ROOT, "courses.html");
-    const coursesExists = fs.existsSync(coursesHtml);
+    const indexHtml = path.join(ROOT, "index.html");
+    const indexExists = fs.existsSync(indexHtml);
 
     console.log("\n========================================================");
     console.log("  КОНСТРУКТОР КУРСОВ — СЕРВЕР ЗАПУЩЕН");
     console.log("========================================================\n");
-    console.log("  ROOT:                " + ROOT);
-    console.log("  courses.html ищется: " + coursesHtml);
-    console.log("  courses.html найден: " + (coursesExists ? "ДА" : "НЕТ"));
+    console.log("  ROOT:              " + ROOT);
+    console.log("  index.html ищется: " + indexHtml);
+    console.log("  index.html найден: " + (indexExists ? "ДА" : "НЕТ"));
     console.log("");
 
-    if (!coursesExists) {
-        console.log("  ⚠ ВНИМАНИЕ: courses.html не найден в ROOT.");
-        console.log("  Проверь, что server.js лежит рядом с courses.html.\n");
+    if (!indexExists) {
+        console.log("  ⚠ ВНИМАНИЕ: index.html не найден в ROOT.");
+        console.log("  Проверь, что server.js лежит рядом с index.html.\n");
     }
 
     console.log("  На этом компьютере:");
-    console.log(`    http://localhost:${PORT}/courses.html\n`);
+    console.log(`    http://localhost:${PORT}/index.html\n`);
 
     console.log("  С телефона (в той же Wi-Fi):");
     const ifaces = os.networkInterfaces();
@@ -264,7 +328,7 @@ server.listen(PORT, "0.0.0.0", () => {
     for (const name in ifaces) {
         for (const iface of ifaces[name]) {
             if (iface.family === "IPv4" && !iface.internal) {
-                console.log(`    http://${iface.address}:${PORT}/courses.html`);
+                console.log(`    http://${iface.address}:${PORT}/index.html`);
                 found = true;
             }
         }

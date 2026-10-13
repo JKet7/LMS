@@ -76,6 +76,7 @@ let glossaryState = {
 };
 
 let navHistory = null;
+let backlinksIndex = null; // { targetLessonId: [ { from, fromSlide, slideType } ] }
 
 const appContainer = document.getElementById("app-container");
 const menuList = document.getElementById("menu-list");
@@ -218,7 +219,8 @@ if (typeof courseSettings !== "undefined") {
 
 function showScreen(name) {
     document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
-    document.getElementById("screen-" + name).classList.add("active");
+    const screen = document.getElementById("screen-" + name);
+    if (screen) screen.classList.add("active");
     appContainer.classList.remove("wide", "narrow");
     if (name === "memo") appContainer.classList.add("wide");
     else if (name === "quiz") appContainer.classList.add("narrow");
@@ -234,7 +236,7 @@ function updateBackButton() {
 }
 
 function loadAll() { try { const raw = localStorage.getItem(STORAGE_KEY); lessonState = raw ? JSON.parse(raw) : {}; } catch(e) { lessonState = {}; } }
-function saveAll() { localStorage.setItem(STORAGE_KEY, JSON.stringify(lessonState)); }
+function saveAll() { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(lessonState)); } catch (e) {} }
 function getState(id) {
     if (!lessonState[id]) lessonState[id] = { currentSlide:0, visited:[], completed:false };
     if (!lessonState[id].visited) lessonState[id].visited = [];
@@ -256,6 +258,283 @@ function getNextLessonId(currentId) {
     return ids[idx + 1];
 }
 
+/* ============================================================
+   БЕЗОПАСНЫЙ РЕНДЕР ТЕКСТА С WIKI-ССЫЛКАМИ
+   Экранирует HTML, но разрешает: <b>, <i>, <u>, <s>, <strong>, <em>, <br>.
+   Сохраняет wiki-ссылки [[...]].
+   ============================================================ */
+const SAFE_TAGS = /^(b|i|u|s|strong|em|br|strike|del|div|span|p)$/i;
+
+function renderSafeText(text, opts) {
+    opts = opts || {};
+    const allowWiki = opts.allowWiki !== false;
+
+    if (text == null) return "";
+    let s = String(text);
+
+    // 0. Убираем HTML-комментарии <!-- ... --> (артефакты Word/Google Docs)
+    s = s.replace(/<!--[\s\S]*?-->/g, "");
+
+    // 1. Экранируем все HTML-теги
+    s = s.replace(/&/g, "&amp;")
+         .replace(/</g, "&lt;")
+         .replace(/>/g, "&gt;")
+         .replace(/"/g, "&quot;")
+         .replace(/'/g, "&#39;");
+
+    // 2. Восстанавливаем разрешённые теги
+    //    Разрешаем style="text-align: left|center|right|justify"
+    s = s.replace(/&lt;(\/?)([a-zA-Z][a-zA-Z0-9]*)\b([\s\S]*?)&gt;/g, function(match, slash, tag, attrs) {
+        const t = tag.toLowerCase();
+        if (!SAFE_TAGS.test(t)) return "";
+
+        // Закрывающий тег
+        if (slash === "/") return "</" + t + ">";
+
+        // Открывающий: ищем style="text-align:..."
+        let safeStyle = "";
+        const styleMatch = attrs.match(/style\s*=\s*(?:&quot;|&#39;)([^&]*?)(?:&quot;|&#39;)/i);
+        if (styleMatch) {
+            const alignMatch = styleMatch[1].match(/text-align\s*:\s*(left|center|right|justify)/i);
+            if (alignMatch) {
+                safeStyle = ' style="text-align:' + alignMatch[1].toLowerCase() + '"';
+            }
+        }
+        return "<" + t + safeStyle + ">";
+    });
+
+    // 3. Восстанавливаем <br> (на всякий случай)
+    s = s.replace(/&lt;br\s*\/?&gt;/gi, "<br>");
+
+    // 4. Wiki-ссылки
+    if (allowWiki) {
+        s = renderWikiLinks(s);
+    }
+
+    return s;
+}
+
+/* ============================================================
+   WIKI-ССЫЛКИ
+   ============================================================ */
+function getLessonIcon(type) {
+    if (type === "quiz") return "🧪";
+    if (type === "memo") return "📌";
+    if (type === "glossary") return "📖";
+    return "📄";
+}
+
+function getWikiLinkDefaultText(lesson, slideNum) {
+    const title = lesson.title || "Без названия";
+    if (slideNum > 0) {
+        if (lesson.type === "theory" && lesson.slides && lesson.slides[slideNum]) {
+            const slideTitle = lesson.slides[slideNum].title || lesson.slides[slideNum].shortName || "";
+            return title + (slideTitle ? " → " + slideTitle : " (слайд " + (slideNum + 1) + ")");
+        }
+        if (lesson.type === "memo" && lesson.cells && lesson.cells[slideNum]) {
+            const cellTitle = lesson.cells[slideNum].title || "";
+            return title + (cellTitle ? " → " + cellTitle : " (ячейка " + (slideNum + 1) + ")");
+        }
+        if (lesson.type === "glossary" && lesson.terms && lesson.terms[slideNum]) {
+            const termName = lesson.terms[slideNum].name || "";
+            return title + (termName ? " → " + termName : " (термин " + (slideNum + 1) + ")");
+        }
+        if (lesson.type === "quiz") {
+            return title + " (вопрос " + (slideNum + 1) + ")";
+        }
+    }
+    return title;
+}
+
+function escapeAttr(s) {
+    return String(s).replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+function renderWikiLinks(html) {
+    if (!html) return html;
+    return String(html).replace(/\[\[([^\[\]]+?)\]\]/g, (match, inner) => {
+        let key = inner;
+        let slideNum = 0;
+        let customText = "";
+
+        const pipeIdx = key.indexOf("|");
+        if (pipeIdx !== -1) {
+            customText = key.slice(pipeIdx + 1).trim();
+            key = key.slice(0, pipeIdx).trim();
+        }
+
+        const colonIdx = key.lastIndexOf(":");
+        if (colonIdx !== -1) {
+            const numStr = key.slice(colonIdx + 1).trim();
+            const num = parseInt(numStr, 10);
+            if (!isNaN(num) && num > 0) {
+                slideNum = num - 1;
+                key = key.slice(0, colonIdx).trim();
+            }
+        }
+
+        const lesson = allLessons[key];
+        if (!lesson) {
+            return `<span class="wiki-link-broken" title="Блок не найден: ${escapeHtml(key)}">[[${escapeHtml(inner)}]]</span>`;
+        }
+
+        const displayText = customText || getWikiLinkDefaultText(lesson, slideNum);
+        const typeClass = "wiki-link-" + lesson.type;
+        const onclick = `goToInternalLink('${escapeAttr(key)}', ${slideNum})`;
+
+        return `<a href="javascript:void(0)" class="wiki-link ${typeClass}" onclick="${onclick}" title="${escapeAttr(lesson.title)}">${escapeHtml(displayText)}</a>`;
+    });
+}
+
+/* ============================================================
+   ПРИМЕЧАНИЯ В ТЕКСТЕ — рендер ((N)) → <span class="note">
+   ============================================================ */
+function renderNotes(html, notes) {
+    if (!html) return html;
+    if (!Array.isArray(notes) || notes.length === 0) {
+        return String(html).replace(/\(\((\d+)\)\)/g, (m, n) =>
+            `<span class="note-broken" title="Нет примечания №${escapeHtml(n)}">((${escapeHtml(n)}))</span>`);
+    }
+    return String(html).replace(/\(\((\d+)\)\)/g, (match, nStr) => {
+        const n = parseInt(nStr, 10);
+        if (!n || n < 1 || n > notes.length) {
+            return `<span class="note-broken" title="Нет примечания №${escapeHtml(nStr)}">((${escapeHtml(nStr)}))</span>`;
+        }
+        const text = escapeHtml(notes[n - 1] || "");
+        return `<span class="note" data-note-idx="${n - 1}" data-note-text="${text.replace(/"/g, '&quot;')}">${n}</span>`;
+    });
+}
+
+/* ============================================================
+   МАРКЕРЫ НА КАРТИНКЕ — рендер
+   ============================================================ */
+function renderImageBlock(b) {
+    const hasMarkers = Array.isArray(b.markers) && b.markers.length > 0;
+    const safeSrc = escapeAttr(b.src || "");
+    const safeAlt = escapeAttr(b.alt || "");
+
+    if (!hasMarkers) {
+        return `<div class="slide-media"><img src="${safeSrc}" alt="${safeAlt}" loading="lazy" data-lightbox="1"></div>`;
+    }
+
+    let html = `<div class="slide-media"><div class="img-with-markers">`;
+    html += `<img src="${safeSrc}" alt="${safeAlt}" loading="lazy" data-lightbox="1">`;
+    b.markers.forEach((m, i) => {
+        const x = Number(m.x) || 0;
+        const y = Number(m.y) || 0;
+        html += `<button type="button" class="img-marker" data-marker-idx="${i}" style="left:${x}%;top:${y}%;" aria-label="Примечание ${i + 1}"></button>`;
+    });
+    html += `</div></div>`;
+    return html;
+}
+
+/* ============================================================
+   BACKLINKS — обратные ссылки
+   ============================================================ */
+function buildBacklinksIndex() {
+    backlinksIndex = {};
+    for (const fromId in allLessons) {
+        const lesson = allLessons[fromId];
+
+        const processBlock = (blocks, slideIdx, slideType) => {
+            (blocks || []).forEach(b => {
+                const texts = [];
+                if (b.type === "p" || b.type === "h3" || b.type === "quote") {
+                    texts.push(b.text || "");
+                } else if (b.type === "ul") {
+                    (b.items || []).forEach(item => {
+                        const t = (typeof item === "string") ? item : (item.text || "");
+                        if (t) texts.push(t);
+                    });
+                } else if (b.type === "link") {
+                    texts.push(b.text || "");
+                }
+
+                texts.forEach(text => {
+                    const matches = String(text).matchAll(/\[\[([^\[\]]+?)\]\]/g);
+                    for (const m of matches) {
+                        let key = m[1];
+                        const pipeIdx = key.indexOf("|");
+                        if (pipeIdx !== -1) key = key.slice(0, pipeIdx);
+                        const colonIdx = key.lastIndexOf(":");
+                        if (colonIdx !== -1) key = key.slice(0, colonIdx);
+                        key = key.trim();
+                        if (!key || !allLessons[key]) continue;
+                        if (!backlinksIndex[key]) backlinksIndex[key] = [];
+                        const exists = backlinksIndex[key].some(
+                            r => r.from === fromId && r.fromSlide === slideIdx
+                        );
+                        if (!exists) {
+                            backlinksIndex[key].push({
+                                from: fromId,
+                                fromSlide: slideIdx,
+                                slideType: slideType
+                            });
+                        }
+                    }
+                });
+            });
+        };
+
+        if (lesson.type === "theory" && lesson.slides) {
+            lesson.slides.forEach((s, i) => processBlock(s.content, i, "slide"));
+        } else if (lesson.type === "memo" && lesson.cells) {
+            lesson.cells.forEach((c, i) => processBlock(c.content, i, "cell"));
+        } else if (lesson.type === "glossary" && lesson.terms) {
+            lesson.terms.forEach((t, i) => processBlock(t.content, i, "term"));
+        }
+    }
+}
+
+function ensureBacklinksIndex() {
+    if (!backlinksIndex) buildBacklinksIndex();
+}
+
+function renderBacklinks(targetLessonId) {
+    ensureBacklinksIndex();
+    const links = backlinksIndex[targetLessonId] || [];
+    if (links.length === 0) return "";
+
+    let html = `<div class="backlinks-block">`;
+    html += `<div class="backlinks-title">↩ Упоминается в</div>`;
+    html += `<ul class="backlinks-list">`;
+
+    links.forEach(link => {
+        const fromLesson = allLessons[link.from];
+        if (!fromLesson) return;
+
+        const typeClass = "wiki-link-" + fromLesson.type;
+
+        let slideLabel = "";
+        if (link.fromSlide > 0 || link.slideType) {
+            if (fromLesson.type === "theory" && fromLesson.slides && fromLesson.slides[link.fromSlide]) {
+                const s = fromLesson.slides[link.fromSlide];
+                const sName = s.shortName || s.title || "";
+                if (sName) slideLabel = " → " + sName;
+                else slideLabel = " (слайд " + (link.fromSlide + 1) + ")";
+            } else if (fromLesson.type === "memo" && fromLesson.cells && fromLesson.cells[link.fromSlide]) {
+                const c = fromLesson.cells[link.fromSlide];
+                if (c.title) slideLabel = " → " + c.title;
+                else slideLabel = " (ячейка " + (link.fromSlide + 1) + ")";
+            } else if (fromLesson.type === "glossary" && fromLesson.terms && fromLesson.terms[link.fromSlide]) {
+                const t = fromLesson.terms[link.fromSlide];
+                if (t.name) slideLabel = " → " + t.name;
+                else slideLabel = " (термин " + (link.fromSlide + 1) + ")";
+            }
+        }
+
+        const onclick = `goToInternalLink('${escapeAttr(link.from)}', ${link.fromSlide})`;
+        html += `<li><a href="javascript:void(0)" class="wiki-link ${typeClass}" onclick="${onclick}">${escapeHtml(fromLesson.title)}${escapeHtml(slideLabel)}</a></li>`;
+    });
+
+    html += `</ul>`;
+    html += `</div>`;
+    return html;
+}
+
+/* ============================================================
+   РЕНДЕР МЕНЮ
+   ============================================================ */
 function renderMenu() {
     loadAll();
     let html = "";
@@ -269,15 +548,9 @@ function renderMenu() {
             ? (state.questionState || []).some(q => q && q.done)
             : (isMemo || isGlossary ? false : (state.visited || []).length > 0);
 
-        const typeLabel = isQuiz ? "Тест"
-            : isMemo ? "Памятка"
-            : isGlossary ? "Глоссарий"
-            : "Теория";
-        const badgeClass = isQuiz ? "quiz"
-            : isMemo ? "memo"
-            : isGlossary ? "glossary"
-            : "theory";
-        const cls = "menu-item " + badgeClass;
+        let cls = "menu-item " + (isQuiz ? "quiz" : (isMemo ? "memo" : (isGlossary ? "glossary" : "theory")));
+        const typeLabel = isQuiz ? "Тест" : isMemo ? "Памятка" : isGlossary ? "Глоссарий" : "Теория";
+        const badgeClass = isQuiz ? "quiz" : isMemo ? "memo" : isGlossary ? "glossary" : "theory";
 
         let count = "";
         if (isQuiz) count = `${lesson.questions.length} ${pluralizeQuestions(lesson.questions.length)}`;
@@ -293,35 +566,34 @@ function renderMenu() {
 
         let actionsHtml = "";
         if (isMemo) {
-            actionsHtml += `<button class="btn btn-primary" onclick="event.stopPropagation(); openMemo('${id}')">Открыть</button>`;
+            actionsHtml += `<button class="btn btn-primary" onclick="event.stopPropagation(); openMemo('${escapeAttr(id)}')">Открыть</button>`;
         } else if (isGlossary) {
-            actionsHtml += `<button class="btn btn-primary" onclick="event.stopPropagation(); openGlossary('${id}')">Открыть</button>`;
+            actionsHtml += `<button class="btn btn-primary" onclick="event.stopPropagation(); openGlossary('${escapeAttr(id)}')">Открыть</button>`;
         } else if (isQuiz) {
             if (started) {
-                actionsHtml += `<button class="btn btn-primary" onclick="event.stopPropagation(); startQuiz('${id}')">Продолжить</button>`;
-                actionsHtml += `<button class="btn btn-text" onclick="event.stopPropagation(); resetBlock('${id}')">Сначала</button>`;
+                actionsHtml += `<button class="btn btn-primary" onclick="event.stopPropagation(); startQuiz('${escapeAttr(id)}')">Продолжить</button>`;
+                actionsHtml += `<button class="btn btn-text" onclick="event.stopPropagation(); resetBlock('${escapeAttr(id)}')">Сначала</button>`;
             } else {
-                actionsHtml += `<button class="btn btn-primary" onclick="event.stopPropagation(); startQuiz('${id}')">Начать</button>`;
+                actionsHtml += `<button class="btn btn-primary" onclick="event.stopPropagation(); startQuiz('${escapeAttr(id)}')">Начать</button>`;
             }
         } else {
             if (started) {
-                actionsHtml += `<button class="btn btn-primary" onclick="event.stopPropagation(); continueLesson('${id}')">Продолжить</button>`;
-                actionsHtml += `<button class="btn btn-text" onclick="event.stopPropagation(); resetBlock('${id}')">Сначала</button>`;
+                actionsHtml += `<button class="btn btn-primary" onclick="event.stopPropagation(); continueLesson('${escapeAttr(id)}')">Продолжить</button>`;
+                actionsHtml += `<button class="btn btn-text" onclick="event.stopPropagation(); resetBlock('${escapeAttr(id)}')">Сначала</button>`;
             } else {
-                actionsHtml += `<button class="btn btn-primary" onclick="event.stopPropagation(); startLesson('${id}')">Начать</button>`;
+                actionsHtml += `<button class="btn btn-primary" onclick="event.stopPropagation(); startLesson('${escapeAttr(id)}')">Начать</button>`;
             }
         }
 
-        // Клик по всей карточке — то же действие, что и основная кнопка
         let cardOnClick = "";
-        if (isMemo) cardOnClick = `onclick="openMemo('${id}')"`;
-        else if (isGlossary) cardOnClick = `onclick="openGlossary('${id}')"`;
-        else if (isQuiz) cardOnClick = started ? `onclick="startQuiz('${id}')"` : `onclick="startQuiz('${id}')"`;
-        else cardOnClick = started ? `onclick="continueLesson('${id}')"` : `onclick="startLesson('${id}')"`;
+        if (isMemo) cardOnClick = `onclick="openMemo('${escapeAttr(id)}')"`;
+        else if (isGlossary) cardOnClick = `onclick="openGlossary('${escapeAttr(id)}')"`;
+        else if (isQuiz) cardOnClick = `onclick="startQuiz('${escapeAttr(id)}')"`;
+        else cardOnClick = started ? `onclick="continueLesson('${escapeAttr(id)}')"` : `onclick="startLesson('${escapeAttr(id)}')"`;
 
         html += `<div class="${cls}" ${cardOnClick}>`;
         html += `<div class="menu-info">`;
-        html += `<h3>${lesson.title}</h3>`;
+        html += `<h3>${escapeHtml(lesson.title)}</h3>`;
         html += `<span class="menu-type-badge ${badgeClass}">${typeLabel}</span>`;
         html += `<p>${count}</p>`;
         html += `</div>`;
@@ -331,6 +603,20 @@ function renderMenu() {
     menuList.innerHTML = html;
 }
 
+function pluralizeCells(n) {
+    const mod10 = n % 10;
+    const mod100 = n % 100;
+    if (mod10 === 1 && mod100 !== 11) return "ячейка";
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return "ячейки";
+    return "ячеек";
+}
+function pluralizeTerms(n) {
+    const mod10 = n % 10;
+    const mod100 = n % 100;
+    if (mod10 === 1 && mod100 !== 11) return "термин";
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return "термина";
+    return "терминов";
+}
 function pluralizeSlides(n) {
     const mod10 = n % 10;
     const mod100 = n % 100;
@@ -338,7 +624,6 @@ function pluralizeSlides(n) {
     if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return "слайда";
     return "слайдов";
 }
-
 function pluralizeQuestions(n) {
     const mod10 = n % 10;
     const mod100 = n % 100;
@@ -347,33 +632,20 @@ function pluralizeQuestions(n) {
     return "вопросов";
 }
 
-function pluralizeCells(n) {
-    const mod10 = n % 10;
-    const mod100 = n % 100;
-    if (mod10 === 1 && mod100 !== 11) return "ячейка";
-    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return "ячейки";
-    return "ячеек";
-}
-
-function pluralizeTerms(n) {
-    const mod10 = n % 10;
-    const mod100 = n % 100;
-    if (mod10 === 1 && mod100 !== 11) return "термин";
-    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return "термина";
-    return "терминов";
-}
-
 function resetBlock(id) { delete lessonState[id]; saveAll(); renderMenu(); }
 
 function startLesson(id) {
     const lesson = allLessons[id];
-    currentLessonId = id; slides = lesson.slides; currentSlide = 0;
+    if (!lesson) return;
+    currentLessonId = id; slides = lesson.slides || []; currentSlide = 0;
     lessonTitleEl.textContent = lesson.title;
     showScreen("lesson"); markVisited(0); renderSlide();
 }
 function continueLesson(id) {
-    const lesson = allLessons[id]; const state = getState(id);
-    currentLessonId = id; slides = lesson.slides; currentSlide = state.currentSlide || 0;
+    const lesson = allLessons[id];
+    if (!lesson) return;
+    const state = getState(id);
+    currentLessonId = id; slides = lesson.slides || []; currentSlide = state.currentSlide || 0;
     lessonTitleEl.textContent = lesson.title;
     showScreen("lesson"); markVisited(currentSlide); renderSlide();
 }
@@ -388,7 +660,11 @@ function exitToMenu() {
     showScreen("menu"); renderMenu();
 }
 function markVisited(i) { const s = getState(currentLessonId); if (!s.visited.includes(i)) s.visited.push(i); s.currentSlide = i; saveAll(); }
-function updateProgressBar() { const s = getState(currentLessonId); progressFill.style.width = (s.visited.length / slides.length) * 100 + "%"; }
+function updateProgressBar() {
+    if (!slides.length) { progressFill.style.width = "0%"; return; }
+    const s = getState(currentLessonId);
+    progressFill.style.width = (s.visited.length / slides.length) * 100 + "%";
+}
 function renderTopicList() {
     const s = getState(currentLessonId);
     let html = "";
@@ -396,36 +672,34 @@ function renderTopicList() {
         let cls = "topic-item";
         if (i === currentSlide) cls += " current";
         else if (s.visited.includes(i)) cls += " visited";
-        html += `<button class="${cls}" onclick="goToSlide(${i})">${slide.shortName}</button>`;
+        html += `<button class="${cls}" onclick="goToSlide(${i})">${escapeHtml(slide.shortName || "")}</button>`;
     });
     topicList.innerHTML = html;
 }
 function goToSlide(i) { currentSlide = i; markVisited(i); renderSlide(); }
 
+/* ============================================================
+   РЕНДЕР КОНТЕНТА
+   ============================================================ */
 function renderTable(b) {
     const rows = b.rows || [];
     if (!rows.length) return "";
     const hasHeader = b.header === true;
     let html = `<div class="slide-table-wrap"><table class="slide-table">`;
-
     let maxCols = 0;
     rows.forEach(r => { if (Array.isArray(r) && r.length > maxCols) maxCols = r.length; });
     if (maxCols === 0) return "";
-
     rows.forEach((row, ri) => {
         const isHeaderRow = hasHeader && ri === 0;
         html += `<tr>`;
         for (let ci = 0; ci < maxCols; ci++) {
             const cell = (row && row[ci] !== undefined) ? String(row[ci]) : "";
-            if (isHeaderRow) {
-                html += `<th>${cell}</th>`;
-            } else {
-                html += `<td>${cell}</td>`;
-            }
+            const safeCell = renderSafeText(cell);
+            if (isHeaderRow) html += `<th>${safeCell}</th>`;
+            else html += `<td>${safeCell}</td>`;
         }
         html += `</tr>`;
     });
-
     html += `</table></div>`;
     return html;
 }
@@ -453,7 +727,7 @@ function renderList(b) {
         } else if (style === "checkbox") {
             markerHtml = `<span class="slide-list-check">☐</span>`;
         }
-        html += `<li class="slide-list-item level-${safeLevel}">${markerHtml}<span class="slide-list-text">${text}</span></li>`;
+        html += `<li class="slide-list-item level-${safeLevel}">${markerHtml}<span class="slide-list-text">${renderSafeText(text)}</span></li>`;
     });
     html += `</ul>`;
     return html;
@@ -462,15 +736,16 @@ function renderList(b) {
 function renderContentBlocks(blocks) {
     let html = "";
     (blocks || []).forEach(b => {
-        if (b.type === "p") html += `<p>${b.text || ""}</p>`;
-        else if (b.type === "h3") html += `<h3>${b.text || ""}</h3>`;
+        if (b.type === "p") html += `<div class="text-p">${renderNotes(renderSafeText(b.text || ""), b.notes)}</div>`;
+        else if (b.type === "h3") html += `<h3>${renderNotes(renderSafeText(b.text || ""), b.notes)}</h3>`;
         else if (b.type === "ul") html += renderList(b);
-        else if (b.type === "quote") html += `<div class="quote">${b.text || ""}</div>`;
+        else if (b.type === "quote") html += `<div class="quote">${renderNotes(renderSafeText(b.text || ""), b.notes)}</div>`;
         else if (b.type === "link") html += renderLinkBlock(b);
-        else if (b.type === "image" && b.src) html += `<div class="slide-media"><img src="${b.src}" alt="${b.alt || ''}" loading="lazy"></div>`;
+        else if (b.type === "image" && b.src) html += renderImageBlock(b);
         else if (b.type === "video" && b.src) {
+            const safeSrc = escapeAttr(b.src);
             html += `<div class="slide-media has-video">`;
-            html += `<video src="${b.src}" controls preload="metadata"></video>`;
+            html += `<video src="${safeSrc}" controls preload="metadata"></video>`;
             html += `<div class="print-video-placeholder">🎬 [Видео: ${escapeHtml(b.src)}]</div>`;
             html += `</div>`;
         }
@@ -481,12 +756,16 @@ function renderContentBlocks(blocks) {
 
 function renderSlide() {
     const slide = slides[currentSlide];
+    if (!slide) { slideContent.innerHTML = ""; return; }
     const isLast = currentSlide === slides.length - 1;
 
-    let html = `<h2 class="slide-title">${slide.title}</h2>`;
+    let html = `<h2 class="slide-title">${escapeHtml(slide.title || "")}</h2>`;
     html += `<div class="slide-content">`;
     html += renderContentBlocks(slide.content);
     html += `</div>`;
+
+    // Backlinks — под слайдом, перед кнопками
+    html += renderBacklinks(currentLessonId);
 
     html += `<div class="nav-row">`;
     if (currentSlide > 0) html += `<button class="nav-btn" onclick="goPrev()">← Назад</button>`;
@@ -527,27 +806,25 @@ function renderSlide() {
 }
 
 function escapeHtml(s) {
-    return String(s).replace(/[&<>"']/g, c => ({
+    return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({
         "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
     }[c]));
 }
+
 function renderLinkBlock(b) {
     const href = b.href || "";
     const text = b.text || "Ссылка";
 
-    // Внутренние ссылки — как раньше
     if (href.startsWith("#")) {
-        return `<div class="link-block"><a class="slide-link internal" href="javascript:void(0)" onclick="goToInternalLink('${href}')">🔗 ${escapeHtml(text)}</a></div>`;
+        return `<div class="link-block"><a class="slide-link internal" href="javascript:void(0)" onclick="goToInternalLink('${escapeAttr(href)}')">🔗 ${escapeHtml(text)}</a></div>`;
     }
 
-    // Внешние — пытаемся сделать превью
     const preview = getLinkPreview(href, text);
     if (preview) return preview;
 
-    // Fallback — иконка + домен
     const domain = getDomain(href);
     return `<div class="link-block">
-        <a class="slide-link link-with-domain" href="${escapeHtml(href)}" target="_blank" rel="noopener">
+        <a class="slide-link link-with-domain" href="${escapeAttr(href)}" target="_blank" rel="noopener">
             <span class="link-icon">🔗</span>
             <span class="link-text-main">${escapeHtml(text)}</span>
             <span class="link-domain">${escapeHtml(domain)}</span>
@@ -568,8 +845,6 @@ function getLinkPreview(href, text) {
     const url = String(href || "").trim();
     const label = escapeHtml(text);
 
-    // === YouTube ===
-    // youtube.com/watch?v=ID  |  youtu.be/ID  |  youtube.com/embed/ID  |  youtube.com/shorts/ID
     let ytId = null;
     let m;
     if ((m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([A-Za-z0-9_-]{11})/))) {
@@ -578,7 +853,7 @@ function getLinkPreview(href, text) {
     if (ytId) {
         const thumb = `https://img.youtube.com/vi/${ytId}/hqdefault.jpg`;
         return `<div class="link-block link-preview">
-            <a class="link-preview-card" href="${escapeHtml(url)}" target="_blank" rel="noopener">
+            <a class="link-preview-card" href="${escapeAttr(url)}" target="_blank" rel="noopener">
                 <div class="link-preview-thumb">
                     <img src="${thumb}" alt="" loading="lazy">
                     <div class="link-preview-play">▶</div>
@@ -591,15 +866,9 @@ function getLinkPreview(href, text) {
         </div>`;
     }
 
-    // === VK Video ===
-    // vkvideo.ru/video-XXXXX_YYYYY  |  vk.com/video-XXXXX_YYYYY  |  vkvideo.ru/playlist/... (не поддерживаем)
     if ((m = url.match(/(?:vkvideo\.ru|vk\.com)\/video(-?\d+)_(\d+)/))) {
-        const oid = m[1];
-        const vid = m[2];
-        // VK даёт превью через img.youtube... нет, у VK свой. Пробуем через vk.com/og
-        // Но без API превью не получить. Fallback — стильная карточка с иконкой.
         return `<div class="link-block link-preview">
-            <a class="link-preview-card link-preview-vk" href="${escapeHtml(url)}" target="_blank" rel="noopener">
+            <a class="link-preview-card link-preview-vk" href="${escapeAttr(url)}" target="_blank" rel="noopener">
                 <div class="link-preview-thumb link-preview-thumb-vk">
                     <div class="link-preview-vk-icon">📺</div>
                     <div class="link-preview-play">▶</div>
@@ -614,9 +883,20 @@ function getLinkPreview(href, text) {
 
     return null;
 }
-function goToInternalLink(href) {
-    const raw = href.slice(1); const parts = raw.split(":");
-    const lessonId = parts[0]; const slideNum = parts[1] ? parseInt(parts[1]) - 1 : 0;
+
+function goToInternalLink(idOrHref, slideIdx) {
+    let lessonId, slideNum;
+
+    if (typeof idOrHref === "string" && idOrHref.startsWith("#")) {
+        const raw = idOrHref.slice(1);
+        const parts = raw.split(":");
+        lessonId = parts[0];
+        slideNum = parts[1] ? parseInt(parts[1]) - 1 : 0;
+    } else {
+        lessonId = idOrHref;
+        slideNum = slideIdx || 0;
+    }
+
     const lesson = allLessons[lessonId];
     if (!lesson) { alert("Блок не найден: " + lessonId); return; }
 
@@ -630,7 +910,7 @@ function goToInternalLink(href) {
         const cur = allLessons[currentLessonId];
         if (cur && cur.type === "theory") { const s = getState(currentLessonId); s.currentSlide = currentSlide; saveAll(); }
     }
-    currentLessonId = lessonId; slides = lesson.slides;
+    currentLessonId = lessonId; slides = lesson.slides || [];
     lessonTitleEl.textContent = lesson.title; showScreen("lesson");
     currentSlide = (slideNum >= 0 && slideNum < slides.length) ? slideNum : 0;
     markVisited(currentSlide); renderSlide();
@@ -678,7 +958,7 @@ function goBack() {
         updateBackButton();
         return;
     }
-    currentLessonId = h.lessonId; slides = lesson.slides;
+    currentLessonId = h.lessonId; slides = lesson.slides || [];
     currentSlide = (h.slideIndex >= 0 && h.slideIndex < slides.length) ? h.slideIndex : 0;
     lessonTitleEl.textContent = lesson.title;
     showScreen("lesson"); markVisited(currentSlide); renderSlide();
@@ -718,7 +998,7 @@ function goToNextLesson() {
         openGlossary(nextId);
     } else {
         currentSlide = 0;
-        slides = lesson.slides;
+        slides = lesson.slides || [];
         lessonTitleEl.textContent = lesson.title;
         showScreen("lesson");
         markVisited(0);
@@ -758,12 +1038,14 @@ function renderMemo(lesson) {
 
     const oldNav = memoGridEl.parentNode.querySelector(".memo-nav-row");
     if (oldNav) oldNav.remove();
+    const oldBacklinks = memoGridEl.parentNode.querySelector(".backlinks-block");
+    if (oldBacklinks) oldBacklinks.remove();
 
     let html = "";
     cells.forEach(cell => {
         html += `<div class="memo-cell">`;
         if (cell.title) {
-            html += `<div class="memo-cell-header">${cell.title}</div>`;
+            html += `<div class="memo-cell-header">${escapeHtml(cell.title)}</div>`;
         }
         html += `<div class="memo-cell-body">`;
         html += renderContentBlocks(cell.content);
@@ -784,6 +1066,11 @@ function renderMemo(lesson) {
             </div>`;
         });
     });
+
+    const backlinksHtml = renderBacklinks(currentLessonId);
+    if (backlinksHtml) {
+        memoGridEl.insertAdjacentHTML("afterend", backlinksHtml);
+    }
 
     let navHtml = `<div class="memo-nav-row">`;
     const nextId = getNextLessonId(currentLessonId);
@@ -828,8 +1115,7 @@ function getSortedTermsWithIndexes(lesson) {
 function getFirstLetter(name) {
     const s = String(name || "").trim();
     if (!s) return "—";
-    const ch = s.charAt(0).toUpperCase();
-    return ch;
+    return s.charAt(0).toUpperCase();
 }
 
 function escapeRegExp(s) {
@@ -900,6 +1186,8 @@ function renderGlossaryTerm(lesson) {
     html += renderContentBlocks(term.content);
     html += `</div>`;
 
+    html += renderBacklinks(currentLessonId);
+
     html += `<div class="glossary-nav-row">`;
     const nextId = getNextLessonId(currentLessonId);
     if (nextId) {
@@ -940,19 +1228,17 @@ function glossarySelect(origIndex) {
     window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
-/* ============================================================
-   ЭКСПОРТ ГЛОССАРИЯ В CSV
-   ============================================================ */
-
-// Превращает массив блоков термина в текст
+/* ===== ЭКСПОРТ ГЛОССАРИЯ В CSV ===== */
 function termContentToText(blocks) {
     const lines = [];
     (blocks || []).forEach(b => {
         if (b.type === "p" || b.type === "h3") {
-            const txt = stripHtml(b.text || "").trim();
+            let txt = stripHtml(b.text || "").trim();
+            txt = stripNoteMarkers(txt, b.notes);
             if (txt) lines.push(txt);
         } else if (b.type === "quote") {
-            const txt = stripHtml(b.text || "").trim();
+            let txt = stripHtml(b.text || "").trim();
+            txt = stripNoteMarkers(txt, b.notes);
             if (txt) lines.push(txt);
         } else if (b.type === "ul") {
             (b.items || []).forEach(item => {
@@ -966,12 +1252,21 @@ function termContentToText(blocks) {
             if (href) lines.push(txt + " → " + href);
             else lines.push(txt);
         }
-        // Картинки и видео игнорируем — они не влезут во флеш-карты
     });
     return lines.join("\n");
 }
 
-// Удаляет HTML-теги из строки
+function stripNoteMarkers(text, notes) {
+    if (!text) return "";
+    return String(text).replace(/\(\((\d+)\)\)/g, (m, nStr) => {
+        const n = parseInt(nStr, 10);
+        if (Array.isArray(notes) && n >= 1 && n <= notes.length) {
+            return "[" + notes[n - 1] + "]";
+        }
+        return "";
+    });
+}
+
 function stripHtml(html) {
     if (!html) return "";
     let s = String(html);
@@ -988,7 +1283,6 @@ function stripHtml(html) {
     return s;
 }
 
-// Экранирует ячейку для CSV (разделитель ;)
 function csvEscape(value) {
     const s = String(value == null ? "" : value);
     if (s.includes(";") || s.includes('"') || s.includes("\n") || s.includes("\r")) {
@@ -1016,7 +1310,6 @@ function exportGlossaryCsv() {
         lines.push(csvEscape(name) + ";" + csvEscape(content));
     });
 
-    // UTF-8 BOM, чтобы Excel не показывал кракозябры
     const content = "\uFEFF" + lines.join("\r\n");
 
     const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
@@ -1032,6 +1325,7 @@ function exportGlossaryCsv() {
 /* ===== ТЕСТ ===== */
 function startQuiz(id) {
     const lesson = allLessons[id];
+    if (!lesson || !lesson.questions) return;
     currentLessonId = id;
     const qs = getQuizState(id);
 
@@ -1058,7 +1352,6 @@ function startQuiz(id) {
         if (s.userAnswer === undefined) s.userAnswer = null;
     });
 
-    // _questionsOrder
     let needQOrder = !qs._questionsOrder || qs._questionsOrder.length !== lesson.questions.length;
     if (!needQOrder) {
         for (const idx of qs._questionsOrder) {
@@ -1071,7 +1364,6 @@ function startQuiz(id) {
         qs._questionsOrder = order;
     }
 
-    // _optionsOrder
     let needOptOrder = !qs._optionsOrder || qs._optionsOrder.length !== lesson.questions.length;
     if (!needOptOrder) {
         for (let i = 0; i < lesson.questions.length; i++) {
@@ -1080,8 +1372,7 @@ function startQuiz(id) {
             if (q.type === "single" || q.type === "multi") {
                 const optCount = (q.options || []).length;
                 if (!order || !Array.isArray(order) || order.length !== optCount) {
-                    needOptOrder = true;
-                    break;
+                    needOptOrder = true; break;
                 }
                 for (const idx of order) {
                     if (idx < 0 || idx >= optCount) { needOptOrder = true; break; }
@@ -1101,7 +1392,6 @@ function startQuiz(id) {
         });
     }
 
-    // _matchOrder
     let needMatchOrder = !qs._matchOrder || qs._matchOrder.length !== lesson.questions.length;
     if (!needMatchOrder) {
         for (let i = 0; i < lesson.questions.length; i++) {
@@ -1114,8 +1404,7 @@ function startQuiz(id) {
                     || !Array.isArray(order.leftOrder) || !Array.isArray(order.rightOrder)
                     || order.leftOrder.length !== pairsCount
                     || order.rightOrder.length !== pairsCount) {
-                    needMatchOrder = true;
-                    break;
+                    needMatchOrder = true; break;
                 }
                 for (const idx of order.leftOrder) {
                     if (idx < 0 || idx >= pairsCount) { needMatchOrder = true; break; }
@@ -1176,6 +1465,7 @@ function formatTime(s) { const m = Math.floor(s / 60); const ss = s % 60; return
 
 function renderQuiz() {
     const lesson = allLessons[currentLessonId];
+    if (!lesson) return;
     const qs = getQuizState(currentLessonId);
     const done = qs.questionState.filter(q => q && q.done).length;
     quizProgressFill.style.width = (done / lesson.questions.length) * 100 + "%";
@@ -1207,7 +1497,7 @@ function renderChoiceQuestion(lesson, q, state, origIdx, qs) {
     const optOrder = qs._optionsOrder[origIdx] || (q.options || []).map((_, i) => i);
 
     let html = "";
-    html += `<div class="quiz-question-text">${q.text}</div>`;
+    html += `<div class="quiz-question-text">${renderSafeText(q.text || "")}</div>`;
     if (isMulti) html += `<div class="quiz-hint">Выберите один или несколько правильных ответов</div>`;
 
     html += `<div class="quiz-options">`;
@@ -1227,12 +1517,12 @@ function renderChoiceQuestion(lesson, q, state, origIdx, qs) {
         }
         const disabled = state.done ? " disabled" : "";
         const onclick = isMulti ? `onclick="quizToggleOption(${origOptIdx})"` : `onclick="quizAnswer(${origOptIdx})"`;
-        html += `<button class="${cls}"${disabled} ${onclick}>${opt}</button>`;
+        html += `<button class="${cls}"${disabled} ${onclick}>${renderSafeText(opt)}</button>`;
     });
     html += `</div>`;
 
     if (q.explain) {
-        html += `<div class="quiz-explain${state.done ? ' show' : ''}"><strong>💡 Почему так:</strong> ${q.explain}</div>`;
+        html += `<div class="quiz-explain${state.done ? ' show' : ''}"><strong>💡 Почему так:</strong> ${renderSafeText(q.explain)}</div>`;
     }
 
     html += `<div class="quiz-nav-row">`;
@@ -1280,11 +1570,10 @@ function renderMatchQuestion(lesson, q, state, origIdx, qs) {
     const pendingRight = state._pendingRight;
 
     let html = "";
-    html += `<div class="quiz-question-text">${q.text || "Соедини пары"}</div>`;
+    html += `<div class="quiz-question-text">${renderSafeText(q.text || "Соедини пары")}</div>`;
     html += `<div class="match-counter">Соединено: ${matchedCount} / ${total}</div>`;
 
     html += `<div class="match-grid">`;
-
     html += `<div class="match-col">`;
     order.leftOrder.forEach(pairIdx => {
         const isMatched = state.matchedPairs.includes(pairIdx);
@@ -1293,10 +1582,9 @@ function renderMatchQuestion(lesson, q, state, origIdx, qs) {
         if (isMatched) cls += " matched";
         else if (isSelected) cls += " selected";
         const onclick = isMatched ? "" : `onclick="matchClickLeft(${pairIdx})"`;
-        html += `<button class="${cls}" ${onclick}>${q.pairs[pairIdx].left}</button>`;
+        html += `<button class="${cls}" ${onclick}>${renderSafeText(q.pairs[pairIdx].left || "")}</button>`;
     });
     html += `</div>`;
-
     html += `<div class="match-col">`;
     order.rightOrder.forEach(pairIdx => {
         const isMatched = state.matchedPairs.includes(pairIdx);
@@ -1305,14 +1593,13 @@ function renderMatchQuestion(lesson, q, state, origIdx, qs) {
         if (isMatched) cls += " matched";
         else if (isSelected) cls += " selected";
         const onclick = isMatched ? "" : `onclick="matchClickRight(${pairIdx})"`;
-        html += `<button class="${cls}" ${onclick}>${q.pairs[pairIdx].right}</button>`;
+        html += `<button class="${cls}" ${onclick}>${renderSafeText(q.pairs[pairIdx].right || "")}</button>`;
     });
     html += `</div>`;
-
     html += `</div>`;
 
     if (allMatched && q.explain) {
-        html += `<div class="quiz-explain show"><strong>💡 Почему так:</strong> ${q.explain}</div>`;
+        html += `<div class="quiz-explain show"><strong>💡 Почему так:</strong> ${renderSafeText(q.explain)}</div>`;
     }
 
     html += `<div class="quiz-nav-row">`;
@@ -1384,9 +1671,7 @@ function checkMatchPair(leftIdx, rightIdx) {
         const total = q.pairs.length;
         if (state.matchedPairs.length === total) {
             state.done = true;
-            if (!state.hadError) {
-                qs.score++;
-            }
+            if (!state.hadError) qs.score++;
         }
         saveAll();
         renderQuizNavGrid();
@@ -1431,8 +1716,8 @@ function renderCardQuestion(lesson, q, state, origIdx, qs) {
 
     if (!showBack) {
         html += `<div class="card-face">`;
-        if (q.frontImage) html += `<img class="card-face-image" src="${q.frontImage}" alt="" onerror="this.style.display='none'">`;
-        html += `<div class="card-face-text">${q.front || ""}</div>`;
+        if (q.frontImage) html += `<img class="card-face-image" src="${escapeAttr(q.frontImage)}" alt="" onerror="this.style.display='none'">`;
+        html += `<div class="card-face-text">${renderSafeText(q.front || "")}</div>`;
         html += `</div>`;
         html += `<div class="card-buttons">`;
         html += `<button class="card-btn dontknow" onclick="cardAnswer('dontknow')" title="Не знаю">✕</button>`;
@@ -1441,8 +1726,8 @@ function renderCardQuestion(lesson, q, state, origIdx, qs) {
     } else {
         html += `<div class="card-answer-label">Ответ</div>`;
         html += `<div class="card-face">`;
-        if (q.backImage) html += `<img class="card-face-image" src="${q.backImage}" alt="" onerror="this.style.display='none'">`;
-        html += `<div class="card-face-text">${q.back || ""}</div>`;
+        if (q.backImage) html += `<img class="card-face-image" src="${escapeAttr(q.backImage)}" alt="" onerror="this.style.display='none'">`;
+        html += `<div class="card-face-text">${renderSafeText(q.back || "")}</div>`;
         html += `</div>`;
     }
 
@@ -1482,9 +1767,10 @@ function cardAnswer(answer) {
 
 function renderQuizNavGrid() {
     const lesson = allLessons[currentLessonId];
+    if (!lesson) return;
     const qs = getQuizState(currentLessonId);
     let html = "";
-    qs._questionsOrder.forEach((origIdx, displayIdx) => {
+    (qs._questionsOrder || []).forEach((origIdx, displayIdx) => {
         const st = qs.questionState[origIdx] || { done:false, wrong:false };
         let cls = "quiz-nav-num";
         if (st.done) cls += " correct";
@@ -1512,7 +1798,7 @@ function quizAnswer(choiceIndex) {
         state.selected = [choiceIndex];
         if (!state.wrong) qs.score++;
         buttons.forEach(b => b.disabled = true);
-        buttons[choiceIndex].classList.add("correct");
+        if (buttons[choiceIndex]) buttons[choiceIndex].classList.add("correct");
         const expEl = document.querySelector(".quiz-explain");
         if (expEl) expEl.classList.add("show");
         const nextBtn = document.getElementById("quiz-next-btn");
@@ -1520,8 +1806,10 @@ function quizAnswer(choiceIndex) {
     } else {
         state.wrong = true;
         state.selected = [choiceIndex];
-        buttons[choiceIndex].classList.add("wrong");
-        buttons[choiceIndex].disabled = true;
+        if (buttons[choiceIndex]) {
+            buttons[choiceIndex].classList.add("wrong");
+            buttons[choiceIndex].disabled = true;
+        }
     }
     saveAll();
     renderQuizNavGrid();
@@ -1649,13 +1937,14 @@ function renderQuizResult(lesson, qs) {
         groupStats.forEach((g, gi) => {
             const pct = g.total > 0 ? Math.round((g.correct / g.total) * 100) : 0;
             const displayName = g.name === "__none__" ? "Без группы" : g.name;
+            const safeDisplayName = escapeHtml(displayName);
             let color = "var(--success)";
             if (pct < 50) color = "var(--error)";
             else if (pct < 80) color = "var(--primary)";
 
             html += `<div class="group-row" id="group-row-${gi}">`;
             html += `<div class="group-row-head" onclick="toggleGroupRow(${gi})">`;
-            html += `<div class="group-row-name"><span class="group-row-arrow">▶</span> ${displayName}</div>`;
+            html += `<div class="group-row-name"><span class="group-row-arrow">▶</span> ${safeDisplayName}</div>`;
             html += `<div class="group-row-right">`;
             html += `<div class="group-row-count">${g.correct} / ${g.total}</div>`;
             html += `<div class="group-row-bar"><div class="group-row-bar-fill" style="width:${pct}%;background:${color};"></div></div>`;
@@ -1671,6 +1960,8 @@ function renderQuizResult(lesson, qs) {
         html += `</div>`;
     }
 
+    html += renderBacklinks(currentLessonId);
+
     quizContent.innerHTML = html;
 }
 
@@ -1682,9 +1973,9 @@ function renderStatsQuestion(item) {
     let html = `<div class="group-q-item">`;
 
     if (q.type === "single" || q.type === "multi") {
-        html += `<div class="group-q-text">${q.text} <span class="group-q-status ${isCorrect ? 'ok' : 'fail'}">${isCorrect ? '✓ верно' : '✗ неверно'}</span></div>`;
+        html += `<div class="group-q-text">${renderSafeText(q.text || "")} <span class="group-q-status ${isCorrect ? 'ok' : 'fail'}">${isCorrect ? '✓ верно' : '✗ неверно'}</span></div>`;
     } else if (q.type === "match") {
-        html += `<div class="group-q-text">${q.text || "Соответствие"} <span class="group-q-status ${isCorrect ? 'ok' : 'fail'}">${isCorrect ? '✓ верно' : '✗ неверно'}</span></div>`;
+        html += `<div class="group-q-text">${renderSafeText(q.text || "Соответствие")} <span class="group-q-status ${isCorrect ? 'ok' : 'fail'}">${isCorrect ? '✓ верно' : '✗ неверно'}</span></div>`;
     } else if (q.type === "card") {
         html += `<div class="group-q-text">Карточка <span class="group-q-status ${isCorrect ? 'ok' : 'fail'}">${isCorrect ? '✓ знал' : '✗ не знал'}</span></div>`;
     }
@@ -1705,28 +1996,28 @@ function renderStatsQuestion(item) {
             else if (wasSelected) prefix = "✗";
             else if (isCorrectOpt) prefix = "•";
 
-            html += `<div class="${cls}">${prefix} ${opt}</div>`;
+            html += `<div class="${cls}">${prefix} ${renderSafeText(opt)}</div>`;
         });
         html += `</div>`;
-        if (q.explain) html += `<div style="margin-top:10px;font-size:13px;color:var(--text-muted);font-style:italic;line-height:1.5;">💡 ${q.explain}</div>`;
+        if (q.explain) html += `<div style="margin-top:10px;font-size:13px;color:var(--text-muted);font-style:italic;line-height:1.5;">💡 ${renderSafeText(q.explain)}</div>`;
     } else if (q.type === "match") {
         html += `<div class="group-match-pairs">`;
         (q.pairs || []).forEach(p => {
-            html += `<div class="group-match-pair correct-answer">${p.left} → ${p.right}</div>`;
+            html += `<div class="group-match-pair correct-answer">${renderSafeText(p.left || "")} → ${renderSafeText(p.right || "")}</div>`;
         });
         html += `</div>`;
-        if (q.explain) html += `<div style="margin-top:10px;font-size:13px;color:var(--text-muted);font-style:italic;line-height:1.5;">💡 ${q.explain}</div>`;
+        if (q.explain) html += `<div style="margin-top:10px;font-size:13px;color:var(--text-muted);font-style:italic;line-height:1.5;">💡 ${renderSafeText(q.explain)}</div>`;
     } else if (q.type === "card") {
         html += `<div class="group-card-view">`;
         html += `<div class="group-card-side">`;
         html += `<div class="group-card-side-label">Передняя сторона</div>`;
-        html += `<div>${q.front || ""}</div>`;
-        if (q.frontImage) html += `<img src="${q.frontImage}" alt="" onerror="this.style.display='none'">`;
+        html += `<div>${renderSafeText(q.front || "")}</div>`;
+        if (q.frontImage) html += `<img src="${escapeAttr(q.frontImage)}" alt="" onerror="this.style.display='none'">`;
         html += `</div>`;
         html += `<div class="group-card-side">`;
         html += `<div class="group-card-side-label">Задняя сторона</div>`;
-        html += `<div>${q.back || ""}</div>`;
-        if (q.backImage) html += `<img src="${q.backImage}" alt="" onerror="this.style.display='none'">`;
+        html += `<div>${renderSafeText(q.back || "")}</div>`;
+        if (q.backImage) html += `<img src="${escapeAttr(q.backImage)}" alt="" onerror="this.style.display='none'">`;
         html += `</div>`;
         html += `</div>`;
     }
@@ -1742,6 +2033,7 @@ function toggleGroupRow(gi) {
 
 function quizRestart() {
     const lesson = allLessons[currentLessonId];
+    if (!lesson) return;
     const qs = getQuizState(currentLessonId);
     qs.currentQuestion = 0; qs.score = 0; qs.timerSeconds = 0; qs.completed = false;
     qs.questionState = lesson.questions.map(q => makeFreshQuestionState(q));
@@ -1770,7 +2062,6 @@ function quizRestart() {
     renderQuiz();
 }
 
-/* ===== ПЕЧАТЬ ===== */
 function printCurrent() {
     const lesson = allLessons[currentLessonId];
     if (!lesson) { window.print(); return; }
@@ -1778,42 +2069,120 @@ function printCurrent() {
     if (lesson.type === "quiz") {
         const backup = quizContent.innerHTML;
         quizContent.innerHTML = renderQuizForPrint(lesson);
+        prepareNotesForPrint();
         window.print();
         setTimeout(() => {
+            cleanupPrintNotes();
             quizContent.innerHTML = backup;
         }, 100);
     } else if (lesson.type === "glossary") {
-        // Подменяем содержимое на полный глоссарий для печати
         const backup = glossaryContentEl.innerHTML;
         glossaryContentEl.innerHTML = renderGlossaryForPrint(lesson);
-        // Скрываем сайдбар и список терминов
         const sidebar = document.querySelector(".glossary-sidebar");
         if (sidebar) sidebar.style.display = "none";
+        prepareNotesForPrint();
         window.print();
         setTimeout(() => {
+            cleanupPrintNotes();
             glossaryContentEl.innerHTML = backup;
             if (sidebar) sidebar.style.display = "";
         }, 100);
     } else {
+        prepareNotesForPrint();
         window.print();
+        setTimeout(cleanupPrintNotes, 100);
     }
+}
+
+function prepareNotesForPrint() {
+    document.querySelectorAll(".slide-content, .memo-cell-body").forEach(container => {
+        container.querySelectorAll("p, h3, .quote").forEach(blockEl => {
+            const notes = blockEl.querySelectorAll(".note");
+            if (notes.length === 0) return;
+            const seen = [];
+            notes.forEach(sp => {
+                const idx = parseInt(sp.dataset.noteIdx, 10);
+                if (!isNaN(idx) && !seen.includes(idx)) seen.push(idx);
+            });
+            if (seen.length === 0) return;
+
+            const box = document.createElement("div");
+            box.className = "print-notes";
+            box.setAttribute("data-print-notes", "1");
+            seen.forEach(idx => {
+                let noteText = "";
+                document.querySelectorAll(`.note[data-note-idx="${idx}"]`).forEach(sp => {
+                    if (!noteText && sp.dataset.noteText) noteText = sp.dataset.noteText;
+                });
+                const div = document.createElement("div");
+                div.className = "print-note-item";
+                div.textContent = (idx + 1) + ". " + noteText;
+                box.appendChild(div);
+            });
+            blockEl.insertAdjacentElement("afterend", box);
+        });
+
+        container.querySelectorAll(".img-with-markers").forEach(wrapEl => {
+            const text = collectMarkersForPrint(wrapEl);
+            if (text.length === 0) return;
+
+            const box = document.createElement("div");
+            box.className = "print-notes";
+            box.setAttribute("data-print-notes", "1");
+            text.forEach((t, i) => {
+                const div = document.createElement("div");
+                div.className = "print-note-item";
+                div.textContent = (i + 1) + ". " + t;
+                box.appendChild(div);
+            });
+            const media = wrapEl.closest(".slide-media") || wrapEl;
+            media.insertAdjacentElement("afterend", box);
+        });
+    });
+}
+
+function collectMarkersForPrint(wrapEl) {
+    const container = wrapEl.closest(".slide-content, .memo-cell-body");
+    if (!container) return [];
+    const wraps = Array.from(container.querySelectorAll(".img-with-markers"));
+    const order = wraps.indexOf(wrapEl);
+    if (order === -1) return [];
+
+    const blocks = getBlocksForContainer(container);
+    if (!Array.isArray(blocks)) return [];
+
+    let counter = -1;
+    for (let i = 0; i < blocks.length; i++) {
+        const b = blocks[i];
+        if (b && b.type === "image" && Array.isArray(b.markers) && b.markers.length > 0) {
+            counter++;
+            if (counter === order) {
+                return b.markers.map(m => m.text || "");
+            }
+        }
+    }
+    return [];
+}
+
+function cleanupPrintNotes() {
+    document.querySelectorAll('[data-print-notes="1"]').forEach(el => el.remove());
 }
 
 function renderQuizForPrint(lesson) {
     let html = "";
-    html += `<h1 class="slide-title">${lesson.title}</h1>`;
+    html += `<h1 class="slide-title">${escapeHtml(lesson.title || "")}</h1>`;
     lesson.questions.forEach((q, idx) => {
         html += `<div class="print-question-item">`;
         html += `<div class="print-question-number">Вопрос ${idx + 1}</div>`;
         if (q.type === "single" || q.type === "multi") {
-            html += `<div class="print-question-text">${q.text || ""}</div>`;
+            html += `<div class="print-question-text">${escapeHtml(q.text || "")}</div>`;
             html += `<div class="print-options">`;
             (q.options || []).forEach((opt) => {
                 html += `<div class="print-option">☐ ${escapeHtml(opt)}</div>`;
             });
             html += `</div>`;
         } else if (q.type === "match") {
-            html += `<div class="print-question-text">${q.text || "Соедини пары"}</div>`;
+            html += `<div class="print-question-text">${escapeHtml(q.text || "Соедини пары")}</div>`;
             html += `<div class="print-match-pairs">`;
             (q.pairs || []).forEach(p => {
                 html += `<div class="print-match-pair">☐ ${escapeHtml(p.left)}</div>`;
@@ -1846,10 +2215,11 @@ function renderQuizForPrint(lesson) {
     html += `</div>`;
     return html;
 }
+
 function renderGlossaryForPrint(lesson) {
     const terms = lesson.terms || [];
-    let html = `<h1 class="slide-title">${escapeHtml(lesson.title)}</h1>`;
-    terms.forEach((term, idx) => {
+    let html = `<h1 class="slide-title">${escapeHtml(lesson.title || "")}</h1>`;
+    terms.forEach((term) => {
         const name = String(term.name || "").trim() || "(без названия)";
         html += `<div class="print-glossary-item">`;
         html += `<h2 class="print-glossary-term">${escapeHtml(name)}</h2>`;
@@ -1860,4 +2230,261 @@ function renderGlossaryForPrint(lesson) {
     });
     return html;
 }
+
+/* ============================================================
+   ПРИМЕЧАНИЯ И МАРКЕРЫ — карточки и модалки
+   ============================================================ */
+let noteCardEl = null;
+let noteHideTimer = null;
+
+function showNoteCard(spanEl) {
+    const text = spanEl.dataset.noteText || "";
+    hideNoteCard();
+
+    const card = document.createElement("div");
+    card.className = "note-card";
+    card.textContent = text;
+    document.body.appendChild(card);
+    noteCardEl = card;
+    card._forEl = spanEl;
+
+    positionCardNear(card, spanEl);
+    requestAnimationFrame(() => card.classList.add("show"));
+}
+
+function hideNoteCard() {
+    if (noteHideTimer) { clearTimeout(noteHideTimer); noteHideTimer = null; }
+    if (noteCardEl) { noteCardEl.remove(); noteCardEl = null; }
+}
+
+function positionCardNear(card, anchorEl) {
+    const rect = anchorEl.getBoundingClientRect();
+    const cardRect = card.getBoundingClientRect();
+    const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
+    const scrollY = window.pageYOffset || document.documentElement.scrollTop;
+
+    let top = rect.bottom + scrollY + 6;
+    let left = rect.left + scrollX;
+
+    if (left + cardRect.width + 16 > window.innerWidth + scrollX) {
+        left = window.innerWidth + scrollX - cardRect.width - 16;
+    }
+    if (left < scrollX + 8) left = scrollX + 8;
+    if (rect.bottom + cardRect.height + 16 > window.innerHeight) {
+        top = rect.top + scrollY - cardRect.height - 6;
+    }
+
+    card.style.top = top + "px";
+    card.style.left = left + "px";
+}
+
+function isTouchDevice() {
+    return ("ontouchstart" in window) || navigator.maxTouchPoints > 0;
+}
+
+document.addEventListener("mouseover", (e) => {
+    const span = e.target.closest && e.target.closest(".note");
+    if (!span) return;
+    if (noteHideTimer) { clearTimeout(noteHideTimer); noteHideTimer = null; }
+    if (noteCardEl && noteCardEl._forEl === span) return;
+    showNoteCard(span);
+});
+
+document.addEventListener("mouseout", (e) => {
+    const span = e.target.closest && e.target.closest(".note");
+    if (!span) return;
+    const related = e.relatedTarget;
+    if (related && related.closest && related.closest(".note") === span) return;
+    if (related && related.closest && related.closest(".note-card")) return;
+    noteHideTimer = setTimeout(hideNoteCard, 150);
+});
+
+document.addEventListener("click", (e) => {
+    const noteSpan = e.target.closest && e.target.closest(".note");
+    if (noteSpan) {
+        if (noteCardEl && noteCardEl._forEl === noteSpan) hideNoteCard();
+        else showNoteCard(noteSpan);
+        return;
+    }
+    const marker = e.target.closest && e.target.closest(".img-marker");
+    if (marker) {
+        const wrap = marker.closest(".img-with-markers");
+        if (!wrap) return;
+        const idx = parseInt(marker.dataset.markerIdx, 10);
+        if (isNaN(idx)) return;
+        const noteText = findMarkerText(idx, wrap);
+        if (!noteText) return;
+        if (isTouchDevice() || window.innerWidth < 700) {
+            showMarkerModal(noteText);
+        } else {
+            showMarkerCard(marker, noteText);
+        }
+        return;
+    }
+    if (noteCardEl && !(e.target.closest && e.target.closest(".note-card"))) {
+        hideNoteCard();
+    }
+});
+
+document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { hideNoteCard(); hideMarkerModal(); }
+});
+
+window.addEventListener("scroll", hideNoteCard, { passive: true });
+window.addEventListener("resize", hideNoteCard);
+
+let markerCardEl = null;
+
+function showMarkerCard(anchorEl, text) {
+    hideNoteCard();
+    hideMarkerModal();
+
+    const card = document.createElement("div");
+    card.className = "note-card";
+    card.textContent = text;
+    document.body.appendChild(card);
+    markerCardEl = card;
+    noteCardEl = card;
+    card._forEl = anchorEl;
+
+    positionCardNear(card, anchorEl);
+    requestAnimationFrame(() => card.classList.add("show"));
+}
+
+function findMarkerText(idx, wrapEl) {
+    const container = wrapEl.closest(".slide-content, .memo-cell-body, .pv-slide-content");
+    if (!container) return "";
+    const wraps = Array.from(container.querySelectorAll(".img-with-markers"));
+    const blockOrderInContainer = wraps.indexOf(wrapEl);
+
+    const blocks = getBlocksForContainer(container);
+    if (!Array.isArray(blocks)) return "";
+
+    let imageBlockIdx = -1;
+    let counter = -1;
+    for (let i = 0; i < blocks.length; i++) {
+        const b = blocks[i];
+        if (b && b.type === "image" && Array.isArray(b.markers) && b.markers.length > 0) {
+            counter++;
+            if (counter === blockOrderInContainer) {
+                imageBlockIdx = i;
+                break;
+            }
+        }
+    }
+    if (imageBlockIdx === -1) return "";
+    const imgBlock = blocks[imageBlockIdx];
+    const m = imgBlock.markers[idx];
+    return m && m.text ? m.text : "";
+}
+
+function getBlocksForContainer(container) {
+    if (!currentLessonId) return null;
+    const lesson = allLessons[currentLessonId];
+    if (!lesson) return null;
+
+    if (container.classList.contains("memo-cell-body")) {
+        const cell = container.closest(".memo-cell");
+        if (!cell) return null;
+        const allCells = Array.from(document.querySelectorAll(".memo-cell"));
+        const cellIdx = allCells.indexOf(cell);
+        if (cellIdx === -1) return null;
+        const c = lesson.cells && lesson.cells[cellIdx];
+        return c ? c.content : null;
+    }
+
+    if (container.classList.contains("pv-slide-content")) return null;
+
+    if (lesson.type === "theory") {
+        const slide = lesson.slides && lesson.slides[currentSlide];
+        return slide ? slide.content : null;
+    }
+
+    if (lesson.type === "glossary") {
+        const term = lesson.terms && lesson.terms[glossaryState.selectedTermIndex];
+        return term ? term.content : null;
+    }
+
+    return null;
+}
+
+let markerModalEl = null;
+
+function showMarkerModal(text) {
+    hideMarkerModal();
+    const overlay = document.createElement("div");
+    overlay.className = "img-marker-modal-overlay";
+    overlay.innerHTML = `
+        <div class="img-marker-modal">
+            <h3 class="img-marker-modal-title">🎯 Примечание</h3>
+            <div class="img-marker-modal-body">${escapeHtml(text)}</div>
+            <div class="img-marker-modal-actions">
+                <button type="button" class="btn btn-primary" data-action="close">Понятно</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+    markerModalEl = overlay;
+
+    overlay.querySelector('[data-action="close"]').onclick = hideMarkerModal;
+    overlay.addEventListener("click", (e) => {
+        if (e.target === overlay) hideMarkerModal();
+    });
+}
+
+function hideMarkerModal() {
+    if (markerModalEl) { markerModalEl.remove(); markerModalEl = null; }
+}
+
+let lightboxEl = null;
+
+function openLightbox(src) {
+    if (lightboxEl) return;
+    const overlay = document.createElement("div");
+    overlay.className = "lightbox-overlay";
+    overlay.innerHTML = `
+        <button type="button" class="lightbox-close" aria-label="Закрыть">✕</button>
+        <img src="${escapeAttr(src)}" alt="">
+    `;
+    document.body.appendChild(overlay);
+    lightboxEl = overlay;
+    document.body.style.overflow = "hidden";
+
+    overlay.addEventListener("click", (e) => {
+        if (e.target === overlay || e.target.classList.contains("lightbox-close") || e.target.tagName === "IMG") {
+            if (e.target.tagName === "IMG" && e.target !== overlay.querySelector("img")) return;
+            closeLightbox();
+        }
+    });
+}
+
+function closeLightbox() {
+    if (lightboxEl) { lightboxEl.remove(); lightboxEl = null; }
+    document.body.style.overflow = "";
+}
+
+document.addEventListener("dblclick", (e) => {
+    const img = e.target.closest && e.target.closest('img[data-lightbox="1"]');
+    if (!img) return;
+    e.preventDefault();
+    openLightbox(img.src);
+});
+
+let lastTapTime = 0;
+let lastTapTarget = null;
+document.addEventListener("touchend", (e) => {
+    const img = e.target.closest && e.target.closest('img[data-lightbox="1"]');
+    if (!img) return;
+    const now = Date.now();
+    if (now - lastTapTime < 350 && lastTapTarget === img) {
+        e.preventDefault();
+        openLightbox(img.src);
+        lastTapTime = 0;
+        lastTapTarget = null;
+    } else {
+        lastTapTime = now;
+        lastTapTarget = img;
+    }
+}, { passive: false });
+
 renderMenu();

@@ -281,27 +281,23 @@ body {
 }
 .card-section { padding: 16px 20px; border-bottom: 1px solid var(--border); }
 .card-section:last-child { border-bottom: none; }
+.section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
 .section-title {
     font-size: 12px; font-weight: 700; color: var(--text-muted);
-    text-transform: uppercase; letter-spacing: .8px; margin: 0 0 12px;
+    text-transform: uppercase; letter-spacing: .8px; margin: 0;
 }
-.lesson-row { display: flex; gap: 2px; margin-bottom: 2px; align-items: stretch; }
-.lesson-item {
-    flex: 1; text-align: left; padding: 12px 14px;
-    border: none; background: transparent; color: var(--text);
-    border-radius: var(--radius-sm); cursor: pointer;
-    font-size: 14px; font-family: inherit; font-weight: 500;
-    transition: all .15s; line-height: 1.3;
+.section-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
 }
-.lesson-item:hover { background: var(--hover); }
-.lesson-item.current {
-    background: var(--primary-soft); color: var(--primary); font-weight: 700;
-}
-.lesson-item .ltype {
-    font-size: 11px; color: var(--text-muted);
-    display: block; margin-top: 3px; font-weight: 400;
-}
-.lesson-item.current .ltype { color: var(--primary); opacity: .75; }
 
 .icon-btn-sm {
     width: 30px; padding: 0; border: none; background: transparent;
@@ -312,17 +308,6 @@ body {
 .icon-btn-sm:disabled { opacity: .3; cursor: default; }
 .icon-btn-sm.export:hover:not(:disabled) { background: var(--primary-soft); color: var(--primary); }
 
-.slide-item {
-    width: 100%; text-align: left; padding: 10px 14px; margin-bottom: 2px;
-    border: none; background: transparent; color: var(--text);
-    border-radius: var(--radius-sm); cursor: pointer;
-    font-size: 13px; font-family: inherit; font-weight: 500;
-    transition: all .15s; line-height: 1.4;
-}
-.slide-item:hover { background: var(--hover); }
-.slide-item.current {
-    background: var(--primary-soft); color: var(--primary); font-weight: 700;
-}
 .btn-group { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
 .btn-group .btn { flex: 1; padding: 8px 12px; font-size: 13px; }
 
@@ -420,7 +405,6 @@ textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
 }
 .block-wrapper ul li:hover .li-tools { display: flex; }
 
-<<<<<<< HEAD
 /* ===== Rich-панель для p / h3 / quote ===== */
 .rich-toolbar {
     display: flex;
@@ -470,8 +454,6 @@ textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
     min-height: 1.4em;
 }
 
-=======
->>>>>>> 346949b7bb479c9521f818b04e0d87338a58181e
 .link-editor {
     padding: 14px 18px; background: var(--secondary-soft);
     border-radius: var(--radius-md);
@@ -1313,39 +1295,6 @@ textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
     padding: 8px 12px;
 }
 
-/* ===== Ключ блока в списке ===== */
-.lesson-item .lkey {
-    display: inline-block;
-    font-family: ui-monospace, Menlo, Consolas, monospace;
-    font-size: 10px;
-    color: var(--text-disabled);
-    background: rgba(0, 0, 0, .05);
-    padding: 1px 6px;
-    border-radius: 4px;
-    margin-top: 4px;
-    cursor: pointer;
-    transition: all .15s;
-    user-select: none;
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-[data-theme="dark"] .lesson-item .lkey {
-    background: rgba(255, 255, 255, .08);
-}
-.lesson-item .lkey:hover {
-    background: var(--primary-soft);
-    color: var(--primary);
-}
-.lesson-item.current .lkey {
-    color: var(--primary);
-    background: rgba(255, 255, 255, .5);
-}
-[data-theme="dark"] .lesson-item.current .lkey {
-    background: rgba(0, 0, 0, .3);
-}
-
 /* ===== РЕДАКТОР СПИСКА ===== */
 .list-editor {
     padding: 8px 0;
@@ -1458,7 +1407,7 @@ textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
 }
 
 /* ============================================================
-   ЧАСТЬ 2 — ПРОЗРАЧНЫЕ КНОПКИ
+   ЧАСТЬ 2 — ПРОЗРАЧНЫЕ КНОПКИ (перекрывают базовые)
    ============================================================ */
 
 /* --- Основная кнопка (.btn-primary) --- */
@@ -1527,6 +1476,7 @@ textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
     border-width: 2px;
     color: var(--success);
 }
+
 /* ===== Загрузка медиа ===== */
 .media-src-row {
     display: flex;
@@ -1586,4 +1536,770 @@ textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
     border-color: var(--primary);
     background: var(--primary-soft);
     color: var(--primary);
+}
+
+/* ============================================================
+   ВЫПАДАЮЩИЕ МЕНЮ (dropdown)
+   ============================================================ */
+.dropdown-wrap {
+    position: relative;
+    display: inline-block;
+}
+.dropdown-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    min-width: 200px;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    padding: 6px;
+    z-index: 500;
+    display: none;
+    animation: dropdownIn .15s ease;
+}
+.dropdown-menu.dropdown-menu-right {
+    left: auto;
+    right: 0;
+}
+.dropdown-menu.show {
+    display: block;
+}
+@keyframes dropdownIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+.dropdown-menu button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 10px 14px;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all .15s;
+    white-space: nowrap;
+}
+.dropdown-menu button:hover {
+    background: var(--hover);
+    color: var(--text-strong);
+}
+
+/* Маленькая кнопка в шапке секции */
+.btn-sm {
+    padding: 6px 14px;
+    font-size: 13px;
+    border-radius: 100px;
+}
+
+/* ============================================================
+   БЛОКИ КУРСА — с ручкой и меню ⋮
+   ============================================================ */
+.lesson-row {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 4px;
+    align-items: stretch;
+    position: relative;
+}
+
+.drag-handle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    flex-shrink: 0;
+    color: var(--text-disabled);
+    cursor: grab;
+    font-size: 14px;
+    user-select: none;
+    border-radius: var(--radius-sm);
+    transition: all .15s;
+}
+.drag-handle:hover {
+    background: var(--hover);
+    color: var(--text-muted);
+}
+.drag-handle:active {
+    cursor: grabbing;
+}
+
+.lesson-item {
+    flex: 1;
+    text-align: left;
+    padding: 10px 12px;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 14px;
+    font-family: inherit;
+    font-weight: 500;
+    transition: all .15s;
+    line-height: 1.3;
+    min-width: 0;
+}
+.lesson-item:hover { background: var(--hover); }
+.lesson-item.current {
+    background: var(--primary-soft);
+    color: var(--primary);
+    font-weight: 700;
+}
+.lesson-item .ltype {
+    font-size: 11px;
+    color: var(--text-muted);
+    display: block;
+    margin-top: 3px;
+    font-weight: 400;
+}
+.lesson-item.current .ltype {
+    color: var(--primary);
+    opacity: .75;
+}
+.lesson-item .lkey {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-disabled);
+    background: rgba(0, 0, 0, .05);
+    padding: 1px 6px;
+    border-radius: 4px;
+    margin-top: 4px;
+    cursor: pointer;
+    transition: all .15s;
+    user-select: none;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+[data-theme="dark"] .lesson-item .lkey {
+    background: rgba(255, 255, 255, .08);
+}
+.lesson-item .lkey:hover {
+    background: var(--primary-soft);
+    color: var(--primary);
+}
+.lesson-item.current .lkey {
+    color: var(--primary);
+    background: rgba(255, 255, 255, .5);
+}
+[data-theme="dark"] .lesson-item.current .lkey {
+    background: rgba(0, 0, 0, .3);
+}
+
+/* Кнопка ⋮ у блока */
+.lesson-menu-btn {
+    width: 28px;
+    flex-shrink: 0;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    transition: all .15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+.lesson-menu-btn:hover {
+    background: var(--hover);
+    color: var(--text);
+}
+
+/* Подсветка при перетаскивании */
+.lesson-row.dragging {
+    opacity: .4;
+}
+.lesson-row.drag-over-top {
+    box-shadow: inset 0 3px 0 0 var(--primary);
+}
+.lesson-row.drag-over-bottom {
+    box-shadow: inset 0 -3px 0 0 var(--primary);
+}
+
+/* ============================================================
+   СЛАЙДЫ — с ручкой и меню ⋮
+   ============================================================ */
+.slide-row {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 2px;
+    align-items: stretch;
+    position: relative;
+}
+.slide-row .drag-handle {
+    width: 20px;
+    font-size: 12px;
+}
+.slide-item {
+    flex: 1;
+    text-align: left;
+    padding: 8px 12px;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 13px;
+    font-family: inherit;
+    font-weight: 500;
+    transition: all .15s;
+    line-height: 1.4;
+    min-width: 0;
+    word-break: break-word;
+}
+.slide-item:hover { background: var(--hover); }
+.slide-item.current {
+    background: var(--primary-soft);
+    color: var(--primary);
+    font-weight: 700;
+}
+
+.slide-menu-btn {
+    width: 24px;
+    flex-shrink: 0;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    transition: all .15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    opacity: 0;
+}
+.slide-row:hover .slide-menu-btn,
+.slide-menu-btn.active {
+    opacity: 1;
+}
+.slide-menu-btn:hover {
+    background: var(--hover);
+    color: var(--text);
+}
+
+.slide-row.dragging {
+    opacity: .4;
+}
+.slide-row.drag-over-top {
+    box-shadow: inset 0 3px 0 0 var(--primary);
+}
+.slide-row.drag-over-bottom {
+    box-shadow: inset 0 -3px 0 0 var(--primary);
+}
+
+/* ============================================================
+   АВТОКОМПЛИТ WIKI-ССЫЛОК (при наборе [[)
+   ============================================================ */
+.wiki-autocomplete {
+    position: fixed;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    padding: 4px;
+    max-height: 260px;
+    overflow-y: auto;
+    min-width: 260px;
+    max-width: 420px;
+    z-index: 10000;
+    animation: wikiAcIn .12s ease;
+}
+@keyframes wikiAcIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.wiki-autocomplete-item {
+    padding: 8px 12px;
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all .1s;
+    line-height: 1.3;
+}
+.wiki-autocomplete-item:hover,
+.wiki-autocomplete-item.selected {
+    background: var(--primary-soft);
+    color: var(--primary);
+}
+.wiki-autocomplete-item .wiki-ac-icon {
+    flex-shrink: 0;
+    font-size: 15px;
+    width: 20px;
+    text-align: center;
+}
+.wiki-autocomplete-item .wiki-ac-title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 500;
+    color: var(--text);
+}
+.wiki-autocomplete-item.selected .wiki-ac-title,
+.wiki-autocomplete-item:hover .wiki-ac-title {
+    color: var(--primary);
+}
+.wiki-autocomplete-item .wiki-ac-type {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    flex-shrink: 0;
+    font-weight: 700;
+}
+.wiki-autocomplete-empty {
+    padding: 14px 12px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 13px;
+    font-style: italic;
+}
+.wiki-autocomplete-hint {
+    padding: 6px 12px;
+    font-size: 11px;
+    color: var(--text-disabled);
+    border-top: 1px solid var(--border);
+    margin-top: 4px;
+    font-family: var(--font-mono);
+}
+.wiki-autocomplete-hint kbd {
+    background: var(--hover);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: inherit;
+    font-size: 10px;
+    margin: 0 2px;
+}
+
+/* Кнопка 🔗 в rich-toolbar */
+.rich-btn.wiki-btn {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    min-width: auto;
+    padding: 0 8px;
+    font-weight: 700;
+}
+
+/* ============================================================
+   ПРИМЕЧАНИЯ К ТЕКСТУ — маркер, список, модалка
+   ============================================================ */
+
+/* Маркер примечания в тексте (превью в админке) */
+.note {
+    color: var(--nav-current);
+    border-bottom: 1px dotted var(--nav-current);
+    cursor: pointer;
+    padding: 0 2px;
+    font-weight: 600;
+    user-select: none;
+    transition: background .15s;
+}
+.note:hover {
+    background: var(--nav-current-soft);
+}
+
+.note-broken {
+    color: var(--error);
+    border-bottom: 1px dotted var(--error);
+    cursor: help;
+    padding: 0 2px;
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+}
+
+/* Кнопка 💬 в rich-панели */
+.rich-btn.note-btn {
+    font-size: 14px;
+    min-width: auto;
+    padding: 0 8px;
+}
+
+/* Список примечаний под блоком */
+.block-notes {
+    margin: 8px 0 4px;
+    padding: 10px 12px;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+}
+.block-notes-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    margin-bottom: 8px;
+}
+.block-notes-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.block-notes-item {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    padding: 6px 8px;
+    border-radius: var(--radius-sm);
+    background: var(--input-bg);
+    border: 1px solid transparent;
+    transition: all .15s;
+}
+.block-notes-item:hover {
+    border-color: var(--border);
+}
+.block-notes-item.is-unused {
+    opacity: .6;
+}
+.block-notes-num {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--nav-current);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.block-notes-text {
+    flex: 1;
+    min-width: 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text);
+    word-break: break-word;
+    white-space: pre-wrap;
+}
+.block-notes-unused-badge {
+    flex-shrink: 0;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    color: var(--error);
+    background: var(--error-bg);
+    padding: 2px 6px;
+    border-radius: 100px;
+}
+.block-notes-actions {
+    display: flex;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+/* Модалка примечания */
+.note-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(13, 20, 22, .55);
+    backdrop-filter: blur(2px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    z-index: 9999;
+    animation: pvFadeIn .2s ease;
+}
+.note-modal {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    width: 100%;
+    max-width: 520px;
+    padding: 24px 28px;
+    animation: pvSlideIn .25s ease;
+}
+.note-modal.note-modal-wide {
+    max-width: 620px;
+}
+.note-modal-title {
+    margin: 0 0 6px;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-strong);
+}
+.note-modal-hint {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin: 0 0 16px;
+    line-height: 1.5;
+}
+.note-modal-textarea {
+    width: 100%;
+    min-height: 100px;
+    max-height: 300px;
+    resize: vertical;
+    padding: 12px 14px;
+    font-family: inherit;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--text);
+    background: var(--input-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    outline: none;
+    transition: all .15s;
+}
+.note-modal-textarea:focus {
+    background: var(--input-bg-focus);
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--primary-soft);
+}
+.note-modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+}
+.note-modal-list-title {
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    color: var(--text-muted);
+}
+.note-modal-list {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 220px;
+    overflow-y: auto;
+}
+.note-modal-list-item {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all .15s;
+    border: 1px solid transparent;
+}
+.note-modal-list-item:hover {
+    background: var(--hover);
+    border-color: var(--border);
+}
+.note-modal-list-item.is-current {
+    background: var(--primary-soft);
+    border-color: var(--primary);
+}
+.note-modal-list-item.is-unused {
+    opacity: .6;
+}
+.note-modal-list-num {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--nav-current);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.note-modal-list-text {
+    flex: 1;
+    min-width: 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.note-modal-list-item.is-current .note-modal-list-text {
+    color: var(--primary);
+    font-weight: 600;
+}
+.note-modal-list-badge {
+    flex-shrink: 0;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    color: var(--error);
+    background: var(--error-bg);
+    padding: 2px 6px;
+    border-radius: 100px;
+}
+
+/* ============================================================
+   МАРКЕРЫ НА ИЗОБРАЖЕНИИ — редактор
+   ============================================================ */
+
+.media-editor.img-with-markers {
+    position: relative;
+}
+
+.img-marker-editor {
+    margin-top: 12px;
+    padding: 12px 14px;
+    background: var(--input-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+}
+
+.img-marker-editor-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    margin-bottom: 10px;
+}
+
+.img-marker-editor-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.5;
+    margin-bottom: 12px;
+}
+
+.img-marker-stage {
+    position: relative;
+    display: inline-block;
+    max-width: 100%;
+    line-height: 0;
+    cursor: crosshair;
+    user-select: none;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    background: var(--media-bg);
+}
+.img-marker-stage.is-adding {
+    cursor: crosshair;
+    outline: 2px dashed var(--primary);
+    outline-offset: 2px;
+}
+.img-marker-stage img {
+    display: block;
+    max-width: 100%;
+    max-height: 400px;
+    border-radius: var(--radius-sm);
+    pointer-events: none;
+}
+
+.img-marker {
+    position: absolute;
+    width: 26px;
+    height: 26px;
+    margin-left: -13px;
+    margin-top: -13px;
+    border-radius: 50%;
+    background: var(--nav-current);
+    color: #fff;
+    border: 2px solid #fff;
+    box-shadow: 0 2px 6px rgba(0,0,0,.35);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    transition: transform .15s, background .15s;
+    padding: 0;
+    font-family: inherit;
+    user-select: none;
+}
+.img-marker:hover {
+    transform: scale(1.15);
+    background: var(--primary);
+    z-index: 5;
+}
+.img-marker.is-active {
+    background: var(--error);
+    transform: scale(1.15);
+    z-index: 5;
+}
+.img-marker::after {
+    content: "✕";
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.img-marker-list {
+    margin-top: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.img-marker-item {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 10px 12px;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+}
+.img-marker-item-num {
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--nav-current);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.img-marker-item-text {
+    flex: 1;
+    min-width: 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text);
+    word-break: break-word;
+    white-space: pre-wrap;
+}
+.img-marker-item-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.img-marker-empty {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-style: italic;
+    padding: 4px 0;
+}
+
+.img-marker-add-btn {
+    margin-top: 10px;
 }
