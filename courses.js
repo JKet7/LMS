@@ -17,5 +17,6 @@ const COURSES = [
     { folder: "Test", title: "Test" },
     { folder: "EN", title: "English language" },
     { folder: "JavaSkript", title: "JavaSkript" },
-    { folder: "Sport", title: "Sport" }
+    { folder: "Sport", title: "Sport" },
+    { folder: "VE", title: "Восточный Экспресс" }
 ];
