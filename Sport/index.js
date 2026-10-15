@@ -74,12 +74,18 @@ let glossaryState = {
     selectedTermIndex: 0,
     searchQuery: ""
 };
-
+let menuState = {
+    query: "",
+    previewId: null,
+    selectedByTap: null   // для тач: id, у которого уже показан preview
+};
 let navHistory = null;
 let backlinksIndex = null; // { targetLessonId: [ { from, fromSlide, slideType } ] }
 
 const appContainer = document.getElementById("app-container");
 const menuList = document.getElementById("menu-list");
+const menuPreviewEl = document.getElementById("menu-preview");
+const menuSearchEl = document.getElementById("menu-search");
 const lessonTitleEl = document.getElementById("lesson-title");
 const quizTitleEl = document.getElementById("quiz-title");
 const progressFill = document.getElementById("progress-fill");
@@ -260,7 +266,7 @@ function getNextLessonId(currentId) {
 
 /* ============================================================
    БЕЗОПАСНЫЙ РЕНДЕР ТЕКСТА С WIKI-ССЫЛКАМИ
-   Экранирует HTML, но разрешает: <b>, <i>, <u>, <s>, <strong>, <em>, <br>.
+   Экранирует HTML, но разрешает: <b>, <i>, <u>, <s>, <strong>, <em>, <br>, <div>, <span>, <p>.
    Сохраняет wiki-ссылки [[...]].
    ============================================================ */
 const SAFE_TAGS = /^(b|i|u|s|strong|em|br|strike|del|div|span|p)$/i;
@@ -288,10 +294,8 @@ function renderSafeText(text, opts) {
         const t = tag.toLowerCase();
         if (!SAFE_TAGS.test(t)) return "";
 
-        // Закрывающий тег
         if (slash === "/") return "</" + t + ">";
 
-        // Открывающий: ищем style="text-align:..."
         let safeStyle = "";
         const styleMatch = attrs.match(/style\s*=\s*(?:&quot;|&#39;)([^&]*?)(?:&quot;|&#39;)/i);
         if (styleMatch) {
@@ -303,7 +307,7 @@ function renderSafeText(text, opts) {
         return "<" + t + safeStyle + ">";
     });
 
-    // 3. Восстанавливаем <br> (на всякий случай)
+    // 3. Восстанавливаем <br>
     s = s.replace(/&lt;br\s*\/?&gt;/gi, "<br>");
 
     // 4. Wiki-ссылки
@@ -533,74 +537,243 @@ function renderBacklinks(targetLessonId) {
 }
 
 /* ============================================================
-   РЕНДЕР МЕНЮ
+   МЕНЮ КУРСА — список + правая панель описания
    ============================================================ */
+
+function getMenuCountLabel(lesson) {
+    const isQuiz = lesson.type === "quiz";
+    const isMemo = lesson.type === "memo";
+    const isGlossary = lesson.type === "glossary";
+    if (isQuiz) {
+        const n = (lesson.questions || []).length;
+        return `${n} ${pluralizeQuestions(n)}`;
+    }
+    if (isMemo) {
+        const n = (lesson.cells || []).length;
+        return `${n} ${pluralizeCells(n)}`;
+    }
+    if (isGlossary) {
+        const n = (lesson.terms || []).length;
+        return `${n} ${pluralizeTerms(n)}`;
+    }
+    const n = (lesson.slides || []).length;
+    return `${n} ${pluralizeSlides(n)}`;
+}
+
+function getMenuTypeLabel(lesson) {
+    if (lesson.type === "quiz") return "Тест";
+    if (lesson.type === "memo") return "Памятка";
+    if (lesson.type === "glossary") return "Глоссарий";
+    return "Теория";
+}
+
+function isLessonStarted(lesson) {
+    const state = lessonState[lesson.__id] || {};
+    if (lesson.type === "quiz") {
+        return (state.questionState || []).some(q => q && q.done);
+    }
+    if (lesson.type === "memo" || lesson.type === "glossary") return false;
+    return (state.visited || []).length > 0;
+}
+
 function renderMenu() {
     loadAll();
-    let html = "";
-    for (const id in allLessons) {
+    if (!menuList) return;
+
+    const q = String(menuState.query || "").trim().toLowerCase();
+    const ids = Object.keys(allLessons);
+    const filtered = ids.filter(id => {
+        if (!q) return true;
         const lesson = allLessons[id];
-        const isQuiz = lesson.type === "quiz";
-        const isMemo = lesson.type === "memo";
-        const isGlossary = lesson.type === "glossary";
-        const state = lessonState[id] || {};
-        const started = isQuiz
-            ? (state.questionState || []).some(q => q && q.done)
-            : (isMemo || isGlossary ? false : (state.visited || []).length > 0);
+        const title = String(lesson.title || "").toLowerCase();
+        return title.includes(q) || id.toLowerCase().includes(q);
+    });
 
-        let cls = "menu-item " + (isQuiz ? "quiz" : (isMemo ? "memo" : (isGlossary ? "glossary" : "theory")));
-        const typeLabel = isQuiz ? "Тест" : isMemo ? "Памятка" : isGlossary ? "Глоссарий" : "Теория";
-        const badgeClass = isQuiz ? "quiz" : isMemo ? "memo" : isGlossary ? "glossary" : "theory";
-
-        let count = "";
-        if (isQuiz) count = `${lesson.questions.length} ${pluralizeQuestions(lesson.questions.length)}`;
-        else if (isMemo) {
-            const n = (lesson.cells || []).length;
-            count = `${n} ${pluralizeCells(n)}`;
-        } else if (isGlossary) {
-            const n = (lesson.terms || []).length;
-            count = `${n} ${pluralizeTerms(n)}`;
-        } else {
-            count = `${lesson.slides.length} ${pluralizeSlides(lesson.slides.length)}`;
-        }
-
-        let actionsHtml = "";
-        if (isMemo) {
-            actionsHtml += `<button class="btn btn-primary" onclick="event.stopPropagation(); openMemo('${escapeAttr(id)}')">Открыть</button>`;
-        } else if (isGlossary) {
-            actionsHtml += `<button class="btn btn-primary" onclick="event.stopPropagation(); openGlossary('${escapeAttr(id)}')">Открыть</button>`;
-        } else if (isQuiz) {
-            if (started) {
-                actionsHtml += `<button class="btn btn-primary" onclick="event.stopPropagation(); startQuiz('${escapeAttr(id)}')">Продолжить</button>`;
-                actionsHtml += `<button class="btn btn-text" onclick="event.stopPropagation(); resetBlock('${escapeAttr(id)}')">Сначала</button>`;
-            } else {
-                actionsHtml += `<button class="btn btn-primary" onclick="event.stopPropagation(); startQuiz('${escapeAttr(id)}')">Начать</button>`;
-            }
-        } else {
-            if (started) {
-                actionsHtml += `<button class="btn btn-primary" onclick="event.stopPropagation(); continueLesson('${escapeAttr(id)}')">Продолжить</button>`;
-                actionsHtml += `<button class="btn btn-text" onclick="event.stopPropagation(); resetBlock('${escapeAttr(id)}')">Сначала</button>`;
-            } else {
-                actionsHtml += `<button class="btn btn-primary" onclick="event.stopPropagation(); startLesson('${escapeAttr(id)}')">Начать</button>`;
-            }
-        }
-
-        let cardOnClick = "";
-        if (isMemo) cardOnClick = `onclick="openMemo('${escapeAttr(id)}')"`;
-        else if (isGlossary) cardOnClick = `onclick="openGlossary('${escapeAttr(id)}')"`;
-        else if (isQuiz) cardOnClick = `onclick="startQuiz('${escapeAttr(id)}')"`;
-        else cardOnClick = started ? `onclick="continueLesson('${escapeAttr(id)}')"` : `onclick="startLesson('${escapeAttr(id)}')"`;
-
-        html += `<div class="${cls}" ${cardOnClick}>`;
-        html += `<div class="menu-info">`;
-        html += `<h3>${escapeHtml(lesson.title)}</h3>`;
-        html += `<span class="menu-type-badge ${badgeClass}">${typeLabel}</span>`;
-        html += `<p>${count}</p>`;
-        html += `</div>`;
-        html += `<div class="menu-actions">${actionsHtml}</div>`;
-        html += `</div>`;
+    if (filtered.length === 0) {
+        menuList.innerHTML = `<div class="menu-empty">Ничего не найдено</div>`;
+        renderMenuPreview(null);
+        return;
     }
+
+    let html = "";
+    filtered.forEach(id => {
+        const lesson = allLessons[id];
+        lesson.__id = id; // временная ссылка, чтобы isLessonStarted работала
+
+        const started = isLessonStarted(lesson);
+        const typeLabel = getMenuTypeLabel(lesson);
+        const badgeClass = lesson.type === "quiz" ? "quiz"
+            : lesson.type === "memo" ? "memo"
+            : lesson.type === "glossary" ? "glossary"
+            : "theory";
+        const countLabel = getMenuCountLabel(lesson);
+
+        const isStaticOpen = (lesson.type === "memo" || lesson.type === "glossary");
+        let actionHtml;
+        if (isStaticOpen) {
+            actionHtml = `<button class="btn btn-primary menu-row-btn" data-action="open" data-id="${escapeAttr(id)}">Открыть</button>`;
+        } else if (started) {
+            actionHtml  = `<button class="btn btn-primary menu-row-btn" data-action="continue" data-id="${escapeAttr(id)}">Продолжить</button>`;
+            actionHtml += `<button class="btn btn-text menu-row-btn menu-row-btn-reset" data-action="reset" data-id="${escapeAttr(id)}" title="Начать сначала">Сначала</button>`;
+        } else {
+            actionHtml = `<button class="btn btn-primary menu-row-btn" data-action="start" data-id="${escapeAttr(id)}">Начать</button>`;
+        }
+
+        const isCurrent = menuState.previewId === id;
+
+        html += `<div class="menu-row${isCurrent ? " is-current" : ""}" data-id="${escapeAttr(id)}" tabindex="0">`;
+        html += `<div class="menu-row-main">`;
+        html += `<div class="menu-row-title">${escapeHtml(lesson.title)}</div>`;
+        html += `<div class="menu-row-meta">`;
+        html += `<span class="menu-type-badge ${badgeClass}">${typeLabel}</span>`;
+        html += `<span class="menu-row-count">${countLabel}</span>`;
+        html += `</div>`;
+        html += `</div>`;
+        html += `<div class="menu-row-actions">${actionHtml}</div>`;
+        html += `</div>`;
+    });
+
     menuList.innerHTML = html;
+
+    // Навешиваем обработчики
+    menuList.querySelectorAll(".menu-row").forEach(row => {
+        const id = row.dataset.id;
+
+        row.addEventListener("mouseenter", () => {
+            menuState.previewId = id;
+            updateCurrentRowHighlight();
+            renderMenuPreview(id);
+        });
+
+        row.addEventListener("focus", () => {
+            menuState.previewId = id;
+            updateCurrentRowHighlight();
+            renderMenuPreview(id);
+        });
+
+        // Клик по строке = открыть блок (мышь) ИЛИ показать preview (тач, первый тап)
+        row.addEventListener("click", (e) => {
+            if (e.target.closest(".menu-row-btn")) return; // кнопка обрабатывается отдельно
+            handleMenuRowActivate(id, row);
+        });
+
+        // Клавиатура: Enter / Space на строке = активировать
+        row.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                handleMenuRowActivate(id, row);
+            }
+        });
+
+        // Кнопки внутри строки
+        row.querySelectorAll(".menu-row-btn").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                const action = btn.dataset.action;
+                const lessonId = btn.dataset.id;
+                if (action === "reset") {
+                    resetBlock(lessonId);
+                }
+                openLessonById(lessonId);
+            });
+        });
+    });
+
+    // Автовыбор: если preview ещё не задан — не выбираем ничего (плейсхолдер)
+    if (menuState.previewId && allLessons[menuState.previewId]) {
+        renderMenuPreview(menuState.previewId);
+    } else {
+        renderMenuPreview(null);
+    }
+}
+
+function updateCurrentRowHighlight() {
+    if (!menuList) return;
+    menuList.querySelectorAll(".menu-row").forEach(r => {
+        r.classList.toggle("is-current", r.dataset.id === menuState.previewId);
+    });
+}
+
+function handleMenuRowActivate(id, row) {
+    const isTouch = isTouchDevice() || window.innerWidth < 900;
+
+    if (isTouch) {
+        // Тач: первый тап — preview, повторный по той же строке — открыть
+        if (menuState.selectedByTap === id) {
+            openLessonById(id);
+        } else {
+            menuState.selectedByTap = id;
+            menuState.previewId = id;
+            updateCurrentRowHighlight();
+            renderMenuPreview(id);
+        }
+    } else {
+        // Мышь: клик — открыть
+        openLessonById(id);
+    }
+}
+
+function openLessonById(id) {
+    const lesson = allLessons[id];
+    if (!lesson) return;
+    if (lesson.type === "quiz") startQuiz(id);
+    else if (lesson.type === "memo") openMemo(id);
+    else if (lesson.type === "glossary") openGlossary(id);
+    else {
+        const state = getState(id);
+        if ((state.visited || []).length > 0) continueLesson(id);
+        else startLesson(id);
+    }
+}
+
+function onMenuSearch() {
+    if (!menuSearchEl) return;
+    menuState.query = menuSearchEl.value || "";
+    menuState.previewId = null;
+    menuState.selectedByTap = null;
+    renderMenu();
+    renderMenuPreview(null);
+}
+
+function renderMenuPreview(id) {
+    if (!menuPreviewEl) return;
+
+    if (!id || !allLessons[id]) {
+        menuPreviewEl.className = "menu-preview is-empty";
+        menuPreviewEl.style.backgroundImage = "";
+        menuPreviewEl.innerHTML = `<div class="menu-preview-placeholder">Наведи на блок</div>`;
+        return;
+    }
+
+    const lesson = allLessons[id];
+    const typeLabel = getMenuTypeLabel(lesson);
+    const countLabel = getMenuCountLabel(lesson);
+    const badgeClass = lesson.type === "quiz" ? "quiz"
+        : lesson.type === "memo" ? "memo"
+        : lesson.type === "glossary" ? "glossary"
+        : "theory";
+
+    const description = String(lesson.description || "").trim();
+    const cover = String(lesson.coverImage || "").trim();
+
+    let inner = `<div class="menu-preview-inner">`;
+    inner += `<div class="menu-preview-badge menu-type-badge ${badgeClass}">${typeLabel}</div>`;
+    inner += `<h2 class="menu-preview-title">${escapeHtml(lesson.title || "")}</h2>`;
+    if (description) {
+        inner += `<div class="menu-preview-desc">${escapeHtml(description)}</div>`;
+    }
+    inner += `<div class="menu-preview-count">${countLabel}</div>`;
+    inner += `</div>`;
+
+    menuPreviewEl.className = "menu-preview";
+    if (cover) {
+        menuPreviewEl.style.backgroundImage = `url("${cover.replace(/"/g, '\\"')}")`;
+        menuPreviewEl.classList.add("has-cover");
+    } else {
+        menuPreviewEl.style.backgroundImage = "";
+        menuPreviewEl.classList.remove("has-cover");
+    }
+    menuPreviewEl.innerHTML = inner;
 }
 
 function pluralizeCells(n) {
@@ -763,9 +936,6 @@ function renderSlide() {
     html += `<div class="slide-content">`;
     html += renderContentBlocks(slide.content);
     html += `</div>`;
-
-    // Backlinks — под слайдом, перед кнопками
-    html += renderBacklinks(currentLessonId);
 
     html += `<div class="nav-row">`;
     if (currentSlide > 0) html += `<button class="nav-btn" onclick="goPrev()">← Назад</button>`;
@@ -1066,12 +1236,7 @@ function renderMemo(lesson) {
             </div>`;
         });
     });
-
-    const backlinksHtml = renderBacklinks(currentLessonId);
-    if (backlinksHtml) {
-        memoGridEl.insertAdjacentHTML("afterend", backlinksHtml);
-    }
-
+   
     let navHtml = `<div class="memo-nav-row">`;
     const nextId = getNextLessonId(currentLessonId);
     if (nextId) {
@@ -1185,9 +1350,7 @@ function renderGlossaryTerm(lesson) {
     html += `<div class="slide-content">`;
     html += renderContentBlocks(term.content);
     html += `</div>`;
-
-    html += renderBacklinks(currentLessonId);
-
+    
     html += `<div class="glossary-nav-row">`;
     const nextId = getNextLessonId(currentLessonId);
     if (nextId) {
@@ -1960,8 +2123,6 @@ function renderQuizResult(lesson, qs) {
         html += `</div>`;
     }
 
-    html += renderBacklinks(currentLessonId);
-
     quizContent.innerHTML = html;
 }
 
@@ -2062,6 +2223,9 @@ function quizRestart() {
     renderQuiz();
 }
 
+/* ============================================================
+   ПЕЧАТЬ
+   ============================================================ */
 function printCurrent() {
     const lesson = allLessons[currentLessonId];
     if (!lesson) { window.print(); return; }
@@ -2070,9 +2234,11 @@ function printCurrent() {
         const backup = quizContent.innerHTML;
         quizContent.innerHTML = renderQuizForPrint(lesson);
         prepareNotesForPrint();
+        prepareHelpForPrint();
         window.print();
         setTimeout(() => {
             cleanupPrintNotes();
+            cleanupHelpForPrint();
             quizContent.innerHTML = backup;
         }, 100);
     } else if (lesson.type === "glossary") {
@@ -2081,22 +2247,41 @@ function printCurrent() {
         const sidebar = document.querySelector(".glossary-sidebar");
         if (sidebar) sidebar.style.display = "none";
         prepareNotesForPrint();
+        prepareHelpForPrint();
         window.print();
         setTimeout(() => {
             cleanupPrintNotes();
+            cleanupHelpForPrint();
             glossaryContentEl.innerHTML = backup;
             if (sidebar) sidebar.style.display = "";
         }, 100);
+    } else if (lesson.type === "theory") {
+        const backup = slideContent.innerHTML;
+        slideContent.innerHTML = renderTheoryForPrint(lesson);
+        prepareNotesForPrint();
+        prepareHelpForPrint();
+        window.print();
+        setTimeout(() => {
+            cleanupPrintNotes();
+            cleanupHelpForPrint();
+            slideContent.innerHTML = backup;
+        }, 100);
     } else {
         prepareNotesForPrint();
+        prepareHelpForPrint();
         window.print();
-        setTimeout(cleanupPrintNotes, 100);
+        setTimeout(() => {
+            cleanupPrintNotes();
+            cleanupHelpForPrint();
+        }, 100);
     }
 }
 
+// Под каждым абзацем/картинкой добавляет список примечаний (для печати).
 function prepareNotesForPrint() {
     document.querySelectorAll(".slide-content, .memo-cell-body").forEach(container => {
-        container.querySelectorAll("p, h3, .quote").forEach(blockEl => {
+        // 1. Текстовые примечания ((N))
+        container.querySelectorAll("p, h3, .quote, .text-p").forEach(blockEl => {
             const notes = blockEl.querySelectorAll(".note");
             if (notes.length === 0) return;
             const seen = [];
@@ -2122,6 +2307,7 @@ function prepareNotesForPrint() {
             blockEl.insertAdjacentElement("afterend", box);
         });
 
+        // 2. Маркеры на картинках
         container.querySelectorAll(".img-with-markers").forEach(wrapEl => {
             const text = collectMarkersForPrint(wrapEl);
             if (text.length === 0) return;
@@ -2231,6 +2417,265 @@ function renderGlossaryForPrint(lesson) {
     return html;
 }
 
+// Все слайды блока теории подряд, для PDF.
+// Каждый слайд — отдельная секция. Разрыв страницы между слайдами — начиная со второго.
+function renderTheoryForPrint(lesson) {
+    const list = lesson.slides || [];
+    let html = `<h1 class="slide-title print-theory-title">${escapeHtml(lesson.title || "")}</h1>`;
+    list.forEach((slide, i) => {
+        html += `<section class="print-theory-slide${i > 0 ? ' print-page-break' : ''}">`;
+        html += `<h2 class="slide-title">${escapeHtml(slide.title || "")}</h2>`;
+        html += `<div class="slide-content">`;
+        html += renderContentBlocks(slide.content);
+        html += `</div>`;
+        html += `</section>`;
+    });
+    return html;
+}
+/* ============================================================
+   СПРАВКА — дата, backlinks, сноски
+   ============================================================ */
+function formatDateTime(iso) {
+    if (!iso) return "—";
+    try {
+        const d = new Date(iso);
+        if (isNaN(d.getTime())) return "—";
+        const pad = (n) => String(n).padStart(2, "0");
+        return pad(d.getDate()) + "." + pad(d.getMonth() + 1) + "." + d.getFullYear() +
+               " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+    } catch (e) { return "—"; }
+}
+
+// Собирает все сноски ((N)) текста для блока + все markers картинок.
+function collectNotesForBlock(blocks) {
+    const textNotes = [];
+    const imageMarkers = [];
+
+    (blocks || []).forEach((b) => {
+        if (b.type === "p" || b.type === "h3" || b.type === "quote") {
+            const notes = Array.isArray(b.notes) ? b.notes : [];
+            if (notes.length > 0) {
+                const text = String(b.text || "");
+                notes.forEach((noteText, idx) => {
+                    const marker = "((" + (idx + 1) + "))";
+                    if (text.indexOf(marker) !== -1) {
+                        textNotes.push({
+                            num: idx + 1,
+                            text: noteText,
+                            where: "текст"
+                        });
+                    }
+                });
+            }
+        }
+        if (b.type === "image" && Array.isArray(b.markers)) {
+            b.markers.forEach((m, idx) => {
+                imageMarkers.push({
+                    num: idx + 1,
+                    text: m.text || "",
+                    where: b.src || "(картинка)"
+                });
+            });
+        }
+    });
+
+    return { textNotes, imageMarkers };
+}
+
+// Собирает справку для текущего блока/слайда.
+function buildHelpContent() {
+    const lesson = allLessons[currentLessonId];
+    if (!lesson) return null;
+
+    const lessonTypeLabel = {
+        theory: "Теория",
+        quiz: "Тест",
+        memo: "Памятка",
+        glossary: "Глоссарий"
+    }[lesson.type] || lesson.type;
+
+    let slideTitle = "";
+    let editedAt = "";
+    let blocks = [];
+
+    if (lesson.type === "theory") {
+        const slide = lesson.slides && lesson.slides[currentSlide];
+        if (slide) {
+            slideTitle = slide.title || slide.shortName || "(без названия)";
+            editedAt = slide._editedAt || "";
+            blocks = slide.content || [];
+        }
+    } else if (lesson.type === "memo") {
+        const cell = lesson.cells && lesson.cells[0];
+        if (cell) {
+            slideTitle = cell.title || "(без названия)";
+            editedAt = cell._editedAt || "";
+            blocks = cell.content || [];
+        }
+    } else if (lesson.type === "glossary") {
+        const term = lesson.terms && lesson.terms[glossaryState.selectedTermIndex];
+        if (term) {
+            slideTitle = term.name || "(без названия)";
+            editedAt = term._editedAt || "";
+            blocks = term.content || [];
+        }
+    } else if (lesson.type === "quiz") {
+        slideTitle = lesson.title || "(без названия)";
+        editedAt = "";
+        blocks = [];
+    }
+
+    const { textNotes, imageMarkers } = collectNotesForBlock(blocks);
+    const backlinksHtml = renderBacklinks(currentLessonId);
+
+    return {
+        lessonTitle: lesson.title,
+        lessonType: lessonTypeLabel,
+        slideTitle,
+        editedAt,
+        backlinksHtml,
+        textNotes,
+        imageMarkers
+    };
+}
+
+function renderHelpBody() {
+    const data = buildHelpContent();
+    if (!data) return "<p>Нет данных для справки.</p>";
+
+    let html = "";
+
+    html += `<h2 class="help-title">Справка</h2>`;
+
+    html += `<div class="help-section">`;
+    html += `<div class="help-row"><span class="help-label">Блок:</span> <span class="help-value">${escapeHtml(data.lessonTitle)}</span></div>`;
+    html += `<div class="help-row"><span class="help-label">Тип:</span> <span class="help-value">${escapeHtml(data.lessonType)}</span></div>`;
+    if (data.slideTitle) {
+        html += `<div class="help-row"><span class="help-label">Слайд:</span> <span class="help-value">${escapeHtml(data.slideTitle)}</span></div>`;
+    }
+    html += `<div class="help-row"><span class="help-label">Дата изменения:</span> <span class="help-value">${escapeHtml(formatDateTime(data.editedAt))}</span></div>`;
+    html += `</div>`;
+
+    if (data.backlinksHtml) {
+        html += `<div class="help-section">`;
+        html += `<div class="help-section-title">Упоминается в</div>`;
+        html += data.backlinksHtml;
+        html += `</div>`;
+    }
+
+    html += `<div class="help-section">`;
+    html += `<div class="help-section-title">Сноски</div>`;
+
+    if (data.textNotes.length === 0 && data.imageMarkers.length === 0) {
+        html += `<div class="help-empty">Сносок нет.</div>`;
+    } else {
+        if (data.textNotes.length > 0) {
+            html += `<div class="help-subsection-title">В тексте</div>`;
+            html += `<ul class="help-notes-list">`;
+            data.textNotes.forEach(n => {
+                html += `<li><span class="help-note-num">${n.num}</span> <span class="help-note-text">${escapeHtml(n.text)}</span></li>`;
+            });
+            html += `</ul>`;
+        }
+        if (data.imageMarkers.length > 0) {
+            html += `<div class="help-subsection-title">На картинках</div>`;
+            html += `<ul class="help-notes-list">`;
+            data.imageMarkers.forEach(m => {
+                html += `<li><span class="help-note-num">${m.num}</span> <span class="help-note-text">${escapeHtml(m.text)}</span> <span class="help-note-where">(${escapeHtml(m.where)})</span></li>`;
+            });
+            html += `</ul>`;
+        }
+    }
+
+    html += `</div>`;
+
+    return html;
+}
+
+function openHelp() {
+    const body = document.getElementById("help-body");
+    const overlay = document.getElementById("help-overlay");
+    if (!body || !overlay) return;
+    body.innerHTML = renderHelpBody();
+    overlay.classList.add("show");
+    document.body.style.overflow = "hidden";
+}
+
+function closeHelp() {
+    const overlay = document.getElementById("help-overlay");
+    if (!overlay) return;
+    overlay.classList.remove("show");
+    document.body.style.overflow = "";
+}
+
+function closeHelpIfOutside(event) {
+    if (event.target.id === "help-overlay") closeHelp();
+}
+
+document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+        const overlay = document.getElementById("help-overlay");
+        if (overlay && overlay.classList.contains("show")) closeHelp();
+    }
+});
+
+// Готовит справку для печати — добавляет последним блоком.
+function prepareHelpForPrint() {
+    const data = buildHelpContent();
+    if (!data) return;
+
+    const wrap = document.createElement("div");
+    wrap.className = "print-help";
+    wrap.setAttribute("data-print-help", "1");
+
+    let html = "";
+    html += `<h1 class="print-help-title">Справка</h1>`;
+
+    html += `<div class="print-help-section">`;
+    html += `<div><b>Блок:</b> ${escapeHtml(data.lessonTitle)}</div>`;
+    html += `<div><b>Тип:</b> ${escapeHtml(data.lessonType)}</div>`;
+    if (data.slideTitle) {
+        html += `<div><b>Слайд:</b> ${escapeHtml(data.slideTitle)}</div>`;
+    }
+    html += `<div><b>Дата изменения:</b> ${escapeHtml(formatDateTime(data.editedAt))}</div>`;
+    html += `</div>`;
+
+    if (data.backlinksHtml) {
+        html += `<div class="print-help-section">`;
+        html += `<div class="print-help-section-title">Упоминается в</div>`;
+        html += data.backlinksHtml.replace(/<a[^>]*>/g, "<span>").replace(/<\/a>/g, "</span>");
+        html += `</div>`;
+    }
+
+    html += `<div class="print-help-section">`;
+    html += `<div class="print-help-section-title">Сноски</div>`;
+    if (data.textNotes.length === 0 && data.imageMarkers.length === 0) {
+        html += `<div class="print-help-empty">Сносок нет.</div>`;
+    } else {
+        if (data.textNotes.length > 0) {
+            html += `<div class="print-help-sub">В тексте:</div>`;
+            data.textNotes.forEach(n => {
+                html += `<div class="print-help-note"><b>${n.num}.</b> ${escapeHtml(n.text)}</div>`;
+            });
+        }
+        if (data.imageMarkers.length > 0) {
+            html += `<div class="print-help-sub">На картинках:</div>`;
+            data.imageMarkers.forEach(m => {
+                html += `<div class="print-help-note"><b>${m.num}.</b> ${escapeHtml(m.text)} <span class="print-help-where">(${escapeHtml(m.where)})</span></div>`;
+            });
+        }
+    }
+    html += `</div>`;
+
+    wrap.innerHTML = html;
+
+    document.body.appendChild(wrap);
+}
+
+function cleanupHelpForPrint() {
+    document.querySelectorAll('[data-print-help="1"]').forEach(el => el.remove());
+}
+
 /* ============================================================
    ПРИМЕЧАНИЯ И МАРКЕРЫ — карточки и модалки
    ============================================================ */
@@ -2333,8 +2778,6 @@ document.addEventListener("keydown", (e) => {
 window.addEventListener("scroll", hideNoteCard, { passive: true });
 window.addEventListener("resize", hideNoteCard);
 
-let markerCardEl = null;
-
 function showMarkerCard(anchorEl, text) {
     hideNoteCard();
     hideMarkerModal();
@@ -2343,7 +2786,6 @@ function showMarkerCard(anchorEl, text) {
     card.className = "note-card";
     card.textContent = text;
     document.body.appendChild(card);
-    markerCardEl = card;
     noteCardEl = card;
     card._forEl = anchorEl;
 
@@ -2436,6 +2878,9 @@ function hideMarkerModal() {
     if (markerModalEl) { markerModalEl.remove(); markerModalEl = null; }
 }
 
+/* ============================================================
+   ЛАЙТБОКС — увеличение картинки по двойному клику
+   ============================================================ */
 let lightboxEl = null;
 
 function openLightbox(src) {

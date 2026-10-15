@@ -301,6 +301,9 @@ function refreshAll() {
     const lesson = currentLesson();
     if (!lesson) return;
     document.getElementById("lesson-title-input").value = lesson.title;
+    document.getElementById("lesson-description-input").value = lesson.description || "";
+    document.getElementById("lesson-cover-input").value = lesson.coverImage || "";
+    renderLessonCoverPreview();
     const typeLabels = { quiz: "Тест", theory: "Теория", memo: "Памятка", glossary: "Глоссарий" };
     document.getElementById("lesson-type-display").value = typeLabels[lesson.type] || lesson.type;
 
@@ -3166,7 +3169,9 @@ function escapeHtml(s) {
         "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
     }[c]));
 }
-
+function escapeAttr(s) {
+    return String(s == null ? "" : s).replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
 // ============================================================
 // БЕЗОПАСНАЯ САНИТАЦИЯ HTML
 // Разрешаем только теги из белого списка и только безопасные атрибуты.
@@ -3971,6 +3976,10 @@ function readFromDom() {
     const lesson = currentLesson();
     if (!lesson) return;
     lesson.title = document.getElementById("lesson-title-input").value;
+    lesson.description = document.getElementById("lesson-description-input").value.trim();
+    lesson.coverImage = document.getElementById("lesson-cover-input").value.trim();
+    if (!lesson.description) delete lesson.description;
+    if (!lesson.coverImage) delete lesson.coverImage;
     if (lesson.type === "quiz") {
         readGroupsFromDom();
         readQuizFromDom();
@@ -3978,23 +3987,26 @@ function readFromDom() {
         const ro = document.getElementById("randomize-options");
         if (rq) lesson.randomizeQuestions = rq.checked;
         if (ro) lesson.randomizeOptions = ro.checked;
-    } else if (lesson.type === "memo") {
-        const cell = lesson.cells[state.currentSlideIndex];
-        if (!cell) return;
-        cell.title = document.getElementById("cell-title-input").value;
-        readEditableBlocks("memo-content", cell.content);
-    } else if (lesson.type === "glossary") {
-        const term = lesson.terms[state.currentSlideIndex];
-        if (!term) return;
-        term.name = document.getElementById("term-name-input").value;
-        readEditableBlocks("term-content", term.content);
-    } else {
-        const slide = lesson.slides[state.currentSlideIndex];
-        if (!slide) return;
-        slide.shortName = document.getElementById("slide-shortname-input").value;
-        slide.title = document.getElementById("slide-title-input").value;
-        readEditableBlocks("preview-content", slide.content);
-    }
+   } else if (lesson.type === "memo") {
+    const cell = lesson.cells[state.currentSlideIndex];
+    if (!cell) return;
+    cell.title = document.getElementById("cell-title-input").value;
+    cell._editedAt = new Date().toISOString();
+    readEditableBlocks("memo-content", cell.content);
+} else if (lesson.type === "glossary") {
+    const term = lesson.terms[state.currentSlideIndex];
+    if (!term) return;
+    term.name = document.getElementById("term-name-input").value;
+    term._editedAt = new Date().toISOString();
+    readEditableBlocks("term-content", term.content);
+} else {
+    const slide = lesson.slides[state.currentSlideIndex];
+    if (!slide) return;
+    slide.shortName = document.getElementById("slide-shortname-input").value;
+    slide.title = document.getElementById("slide-title-input").value;
+    slide._editedAt = new Date().toISOString();
+    readEditableBlocks("preview-content", slide.content);
+}
     courseSettings.courseTitle = document.getElementById("course-title-input").value;
     courseSettings.pageTitle = document.getElementById("page-title-input").value;
     saveDraft();
@@ -4020,11 +4032,28 @@ function onFieldChange() {
             else if (lesson.type === "glossary") renderTermsList();
             else renderSlideList();
         }
+
+        // Живое превью обложки — реагирует на ручной ввод пути
+        // в #lesson-cover-input, не дожидаясь переключения блока.
+        updateLiveCoverPreview();
+
         saveDraft();
         autoSaveToServer();
     }, 2000);
 }
-
+function updateLiveCoverPreview() {
+    const box = document.getElementById("lesson-cover-preview");
+    const input = document.getElementById("lesson-cover-input");
+    if (!box || !input) return;
+    const src = input.value.trim();
+    if (!src) {
+        box.innerHTML = "";
+        box.style.display = "none";
+        return;
+    }
+    box.style.display = "block";
+    box.innerHTML = `<img src="${escapeAttr(src)}" alt="" onerror="this.parentNode.innerHTML='<div class=&quot;lesson-cover-preview-error&quot;>⚠ Файл не найден</div>'">`;
+}
 function onCourseSettingsChange() {
     clearTimeout(changeTimer);
     changeTimer = setTimeout(() => {
@@ -5528,5 +5557,124 @@ let noteEditModalEl = null;
 function closeNoteEditModal() {
     if (noteEditModalEl) { noteEditModalEl.remove(); noteEditModalEl = null; }
 }
+/* ============================================================
+   ОБЛОЖКА БЛОКА — превью и загрузка
+   ============================================================ */
 
+function renderLessonCoverPreview() {
+    const input = document.getElementById("lesson-cover-input");
+    const box = document.getElementById("lesson-cover-preview");
+    if (!box || !input) return;
+    const lesson = currentLesson();
+    input.value = (lesson && lesson.coverImage) ? lesson.coverImage : "";
+    updateLiveCoverPreview();
+}
+
+function setLessonCover(path) {
+    const lesson = currentLesson();
+    if (!lesson) return;
+    lesson.coverImage = path || "";
+    if (!lesson.coverImage) delete lesson.coverImage;
+    const input = document.getElementById("lesson-cover-input");
+    if (input) input.value = lesson.coverImage || "";
+    renderLessonCoverPreview();
+    saveDraft();
+    autoSaveToServer();
+}
+
+(function setupLessonCoverUpload() {
+    const btn = document.getElementById("lesson-cover-file-btn");
+    const fileInput = document.getElementById("lesson-cover-file-input");
+    if (!btn || !fileInput) return;
+
+    btn.addEventListener("click", () => fileInput.click());
+
+    fileInput.addEventListener("change", () => {
+        const f = fileInput.files && fileInput.files[0];
+        if (f) uploadLessonCover(f);
+        fileInput.value = "";
+    });
+
+    // Ctrl+V — вставить картинку из буфера, когда курсор в поле пути
+    const srcInput = document.getElementById("lesson-cover-input");
+    if (srcInput) {
+        srcInput.addEventListener("paste", (e) => {
+            const items = e.clipboardData && e.clipboardData.items;
+            if (!items) return;
+            for (const item of items) {
+                if (item.type.startsWith("image/")) {
+                    const file = item.getAsFile();
+                    if (file) {
+                        e.preventDefault();
+                        const ext = file.type.split("/")[1] || "png";
+                        const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+                        Object.defineProperty(file, "name", {
+                            value: `cover_${ts}.${ext}`,
+                            writable: false
+                        });
+                        uploadLessonCover(file);
+                        return;
+                    }
+                }
+            }
+        });
+    }
+})();
+
+function uploadLessonCover(file) {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+        setStatus("⚠ Это не картинка", "err");
+        return;
+    }
+
+    const defaultName = file.name || "cover.png";
+    let name = prompt("Имя файла (с расширением):", defaultName);
+    if (!name) return;
+    name = name.trim();
+    if (!name) return;
+
+    const m = location.pathname.match(/^\/([^\/]+)\/admin\.html$/);
+    const course = m ? m[1] : COURSE_KEY;
+
+    const progressWrap = document.getElementById("lesson-cover-progress");
+    const progressFill = document.getElementById("lesson-cover-progress-fill");
+    const progressText = document.getElementById("lesson-cover-progress-text");
+    progressWrap.style.display = "block";
+    progressFill.style.width = "0%";
+    progressText.textContent = "Загрузка... 0%";
+
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `/upload?course=${encodeURIComponent(course)}&type=images&filename=${encodeURIComponent(name)}`);
+
+    xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+            const pct = Math.round((e.loaded / e.total) * 100);
+            progressFill.style.width = pct + "%";
+            progressText.textContent = "Загрузка... " + pct + "%";
+        }
+    };
+
+    xhr.onload = () => {
+        progressWrap.style.display = "none";
+        if (xhr.status === 200) {
+            try {
+                const data = JSON.parse(xhr.responseText);
+                setLessonCover(data.path);
+                setStatus("✓ Обложка загружена: " + data.path, "ok");
+            } catch (e) {
+                setStatus("⚠ Ответ сервера непонятен", "err");
+            }
+        } else {
+            setStatus("⚠ Ошибка загрузки: " + xhr.status + " " + xhr.responseText, "err");
+        }
+    };
+
+    xhr.onerror = () => {
+        progressWrap.style.display = "none";
+        setStatus("⚠ Сервер не запущен или недоступен. Запусти server.js.", "err");
+    };
+
+    xhr.send(file);
+}
 init();

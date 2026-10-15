@@ -34,16 +34,26 @@
 
 <div class="app-container" id="app-container">
 
-    <div class="screen active" id="screen-menu">
-        <div class="screen-header">
-            <div>
-                <h1 class="screen-title" id="course-title" ondblclick="openAdmin()">Курс</h1>
-                <p class="screen-subtitle">Выбери блок и изучай теорию, проходи тесты или открывай памятки</p>
-            </div>
-            <button class="btn-icon" onclick="toggleTheme()" title="Сменить тему">🌙</button>
+<div class="screen active" id="screen-menu">
+    <div class="screen-header">
+        <div>
+            <h1 class="screen-title" id="course-title" ondblclick="openAdmin()">Курс</h1>
+            <p class="screen-subtitle">Выбери блок и изучай теорию, проходи тесты или открывай памятки</p>
         </div>
-        <div class="menu-list" id="menu-list"></div>
+        <button class="btn-icon" onclick="toggleTheme()" title="Сменить тему">🌙</button>
     </div>
+    <div class="menu-split" id="menu-split">
+        <div class="menu-list-col">
+            <div class="menu-search-wrap">
+                <input type="text" class="menu-search" id="menu-search" placeholder="🔍 Поиск блока..." oninput="onMenuSearch()">
+            </div>
+            <div class="menu-list" id="menu-list"></div>
+        </div>
+        <div class="menu-preview-col">
+            <div class="menu-preview" id="menu-preview"></div>
+        </div>
+    </div>
+</div>
 
     <div class="screen" id="screen-lesson">
         <div class="card">
@@ -68,6 +78,7 @@
                 </div>
             </div>
             <aside class="lesson-sidebar">
+                <button class="help-btn" onclick="openHelp()">Справка</button>
                 <h3>Содержание</h3>
                 <nav class="topic-list" id="topic-list"></nav>
             </aside>
@@ -98,6 +109,7 @@
                 </div>
             </div>
             <aside class="quiz-sidebar">
+                <button class="help-btn" onclick="openHelp()">Справка</button>
                 <h3>Навигация</h3>
                 <div class="quiz-nav-grid" id="quiz-nav-grid"></div>
             </aside>
@@ -109,6 +121,7 @@
             <h1 class="memo-screen-title" id="memo-title"></h1>
             <div class="header-right">
                 <button class="btn btn-text print-hide" id="back-btn-memo" onclick="goBack()" style="display:none;">← Назад</button>
+                <button class="btn-icon print-hide" onclick="openHelp()" title="Справка">📖</button>
                 <button class="btn-icon print-hide" onclick="printCurrent()" title="Сохранить в PDF">📄</button>
                 <button class="btn-icon print-hide" onclick="toggleTheme()" title="Сменить тему">🌙</button>
                 <button class="btn btn-text print-hide" onclick="exitToMenu()">← В меню</button>
@@ -124,6 +137,7 @@
                     <div class="lesson-title" id="glossary-title"></div>
                     <div class="header-right">
                         <button class="btn btn-text print-hide" id="back-btn-glossary" onclick="goBack()" style="display:none;">← Назад</button>
+                        <button class="btn-icon print-hide" onclick="openHelp()" title="Справка">📖</button>
                         <button class="btn-icon print-hide" onclick="printCurrent()" title="Сохранить в PDF">📄</button>
                         <button class="btn-icon print-hide" onclick="exportGlossaryCsv()" title="Экспорт глоссария в CSV">📊</button>
                         <button class="btn-icon print-hide" onclick="toggleTheme()" title="Сменить тему">🌙</button>
@@ -148,6 +162,16 @@
         </div>
     </div>
 
+</div>
+
+<!-- ============================================================
+     МОДАЛКА СПРАВКИ
+     ============================================================ -->
+<div class="help-overlay" id="help-overlay" onclick="closeHelpIfOutside(event)">
+    <div class="help-modal" id="help-modal">
+        <button class="help-close" onclick="closeHelp()" title="Закрыть (Esc)">✕</button>
+        <div id="help-body"></div>
+    </div>
 </div>
 
 <script src="data.js"></script>

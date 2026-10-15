@@ -2303,3 +2303,25 @@ textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
 .img-marker-add-btn {
     margin-top: 10px;
 }
+/* ============================================================
+   ОБЛОЖКА БЛОКА — превью в админке
+   ============================================================ */
+.lesson-cover-preview {
+    margin-top: 12px;
+}
+.lesson-cover-preview img {
+    max-width: 100%;
+    max-height: 180px;
+    border-radius: var(--radius-sm);
+    display: block;
+    background: var(--media-bg);
+    border: 1px solid var(--border);
+}
+.lesson-cover-preview-error {
+    padding: 14px 16px;
+    border: 1px dashed var(--error-border);
+    border-radius: var(--radius-sm);
+    color: var(--error);
+    background: var(--error-bg);
+    font-size: 13px;
+}

@@ -83,7 +83,8 @@ const allLessons = {
                         "type": "p",
                         "text": "[[new_memo]]<br><br>[[new_memo]]]] [[new_lesson_1]] <br>"
                     }
-                ]
+                ],
+                "_editedAt": "2026-10-15T08:38:21.831Z"
             },
             {
                 "shortName": "Проверяем медиа теории",
@@ -255,7 +256,9 @@ const allLessons = {
                     }
                 ]
             }
-        ]
+        ],
+        "description": "Тут мы тестируем описание. Описание должно быть. Или не быть. Такой вот вопрос",
+        "coverImage": "images/1.png"
     },
     "new_quiz": {
         "type": "quiz",

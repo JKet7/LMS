@@ -115,7 +115,7 @@
             </div>
         </div>
 
-        <div class="form-card">
+        <        <div class="form-card">
             <div class="form-card-header">
                 <div class="icon-badge">📚</div>
                 <div class="form-card-title">Текущий блок</div>
@@ -123,6 +123,25 @@
             <div class="field">
                 <label class="field-label">Название блока (в меню курса)</label>
                 <input class="input" type="text" id="lesson-title-input" oninput="onFieldChange()">
+            </div>
+            <div class="field">
+                <label class="field-label">Краткое описание блока <span style="font-weight:400;color:var(--text-disabled);">(показывается в меню при наведении)</span></label>
+                <textarea class="input" id="lesson-description-input" rows="3" placeholder="Например: Как эффективно общаться и продвигать идеи" oninput="onFieldChange()"></textarea>
+                <div class="field-hint">Необязательно. Если пусто — в правой панели меню будет только заголовок.</div>
+            </div>
+            <div class="field">
+                <label class="field-label">Фоновая картинка блока <span style="font-weight:400;color:var(--text-disabled);">(необязательно)</span></label>
+                <div class="media-src-row">
+                    <input class="input media-src-input" type="text" id="lesson-cover-input" placeholder="images/cover.png  или  https://..." oninput="onFieldChange()">
+                    <button type="button" class="btn btn-outline media-file-btn" id="lesson-cover-file-btn">📁 Выбрать</button>
+                </div>
+                <input type="file" id="lesson-cover-file-input" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml" style="display:none;">
+                <div class="media-progress" id="lesson-cover-progress" style="display:none;">
+                    <div class="media-progress-bar"><div class="media-progress-fill" id="lesson-cover-progress-fill"></div></div>
+                    <div class="media-progress-text" id="lesson-cover-progress-text"></div>
+                </div>
+                <div class="field-hint">Кладётся в <code>images/</code> рядом с <code>index.html</code>. Работает и прямая ссылка. В меню картинка станет фоном правой панели.</div>
+                <div id="lesson-cover-preview" class="lesson-cover-preview"></div>
             </div>
             <div class="field">
                 <label class="field-label">Тип блока</label>
