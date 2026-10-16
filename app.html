@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Конструктор курсов — читатель и редактор">
+    <meta name="color-scheme" content="light dark">
+    <title id="page-title">Курс</title>
+
+    <!-- Anti-FOUC: тема + режим ДО первой отрисовки -->
+    <script>
+        (function() {
+            try {
+                var t = localStorage.getItem("kp_course_theme");
+                if (t === "dark" || t === "light") {
+                    document.documentElement.setAttribute("data-theme", t);
+                } else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+                    document.documentElement.setAttribute("data-theme", "dark");
+                }
+                var m = localStorage.getItem("kp_app_mode");
+                if (m === "reader" || m === "author") {
+                    document.documentElement.setAttribute("data-app-mode", m);
+                } else {
+                    document.documentElement.setAttribute("data-app-mode", "reader");
+                }
+            } catch (e) {}
+        })();
+    </script>
+
+    <link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<noscript>
+    <div style="max-width: 640px; margin: 80px auto; padding: 32px 24px; font-family: sans-serif; line-height: 1.6;">
+        <h1 style="margin: 0 0 12px; font-size: 22px;">⚠ JavaScript отключён</h1>
+        <p style="margin: 0 0 12px;">Курс не может отобразиться без JavaScript. Включи его в настройках браузера и обнови страницу.</p>
+    </div>
+</noscript>
+
+<!-- ============================================================
+     ТОПБАР — общий (для читателя и редактора)
+     ============================================================ -->
+<div class="topbar" id="app-topbar">
+    <div class="left">
+        <div class="logo" id="topbar-logo">📚</div>
+        <div class="title" id="topbar-title">Курс</div>
+    </div>
+    <div class="right">
+        <div class="mode-switch" id="mode-switch">
+            <button type="button" id="mode-btn-reader" data-mode="reader">👁 Читатель</button>
+            <button type="button" id="mode-btn-author" data-mode="author">✏️ Редактор</button>
+        </div>
+
+        <button class="btn btn-outline print-hide reader-only" onclick="printCurrent()" title="Сохранить в PDF">📄</button>
+        <button class="btn-icon reader-only" onclick="toggleTheme()" title="Сменить тему" id="theme-btn-reader">🌙</button>
+
+        <button class="btn btn-outline author-only" onclick="openPreview()" title="Предпросмотр">👁 Предпросмотр</button>
+        <button class="btn btn-outline author-only" onclick="downloadData()" title="Скачать data.js">📤 Скачать</button>
+        <button class="btn btn-outline author-only" onclick="reloadFromFile()" title="Откатить к data.js">↻ Откатить</button>
+        <button class="btn btn-primary author-only" onclick="saveToFile()">💾 Сохранить</button>
+        <button class="btn-icon author-only" onclick="toggleTheme()" title="Сменить тему" id="theme-btn-author">🌙</button>
+    </div>
+</div>
+
+<!-- ============================================================
+     ЧИТАТЕЛЬ
+     ============================================================ -->
+<div id="reader-root">
+
+    <div class="app-container" id="app-container">
+
+        <div class="screen active" id="screen-menu">
+            <div class="screen-header">
+                <div>
+                    <h1 class="screen-title" id="course-title" ondblclick="openAdmin()">Курс</h1>
+                    <p class="screen-subtitle">Выбери блок и изучай теорию, проходи тесты или открывай памятки</p>
+                </div>
+            </div>
+
+            <div class="menu-split" id="menu-split">
+                <div class="menu-list-col">
+                    <div class="menu-search-wrap">
+                        <input type="text" class="menu-search" id="menu-search" placeholder="🔍 Поиск блока..." oninput="onMenuSearch()">
+                    </div>
+                    <div class="menu-list" id="menu-list"></div>
+                </div>
+                <div class="menu-preview-col">
+                    <div class="menu-preview" id="menu-preview"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="screen" id="screen-lesson">
+            <div class="card">
+                <div class="card-body">
+                    <div class="lesson-header">
+                        <div class="lesson-title" id="lesson-title"></div>
+                        <div class="header-right">
+                            <button class="btn btn-text print-hide" id="back-btn-lesson" onclick="goBack()" style="display:none;">← Назад</button>
+                            <button class="btn-icon print-hide" onclick="printCurrent()" title="Сохранить в PDF">📄</button>
+                            <button class="btn-icon print-hide" onclick="toggleTheme()" title="Сменить тему">🌙</button>
+                            <button class="btn btn-text print-hide" onclick="exitToMenu()">← В меню</button>
+                        </div>
+                    </div>
+                    <div class="progress-bar" style="margin-top:20px;"><div class="progress-fill" id="progress-fill"></div></div>
+                </div>
+            </div>
+
+            <div class="lesson-layout">
+                <div class="lesson-main">
+                    <div class="card">
+                        <div class="card-body" id="slide-content"></div>
+                    </div>
+                </div>
+                <aside class="lesson-sidebar">
+                    <button class="help-btn" onclick="openHelp()">Справка</button>
+                    <h3>Содержание</h3>
+                    <nav class="topic-list" id="topic-list"></nav>
+                </aside>
+            </div>
+        </div>
+
+        <div class="screen" id="screen-quiz">
+            <div class="card">
+                <div class="card-body">
+                    <div class="lesson-header">
+                        <div class="lesson-title" id="quiz-title"></div>
+                        <div class="header-right">
+                            <span class="timer print-hide" id="quiz-timer">00:00</span>
+                            <button class="btn btn-text print-hide" id="back-btn-quiz" onclick="goBack()" style="display:none;">← Назад</button>
+                            <button class="btn-icon print-hide" onclick="printCurrent()" title="Сохранить в PDF">📄</button>
+                            <button class="btn-icon print-hide" onclick="toggleTheme()" title="Сменить тему">🌙</button>
+                            <button class="btn btn-text print-hide" onclick="exitToMenu()">← В меню</button>
+                        </div>
+                    </div>
+                    <div class="progress-bar" style="margin-top:20px;"><div class="progress-fill" id="quiz-progress-fill"></div></div>
+                </div>
+            </div>
+
+            <div class="quiz-layout">
+                <div class="quiz-main">
+                    <div class="card">
+                        <div class="card-body" id="quiz-content"></div>
+                    </div>
+                </div>
+                <aside class="quiz-sidebar">
+                    <button class="help-btn" onclick="openHelp()">Справка</button>
+                    <h3>Навигация</h3>
+                    <div class="quiz-nav-grid" id="quiz-nav-grid"></div>
+                </aside>
+            </div>
+        </div>
+
+        <div class="screen" id="screen-memo">
+            <div class="memo-screen-header">
+                <h1 class="memo-screen-title" id="memo-title"></h1>
+                <div class="header-right">
+                    <button class="btn btn-text print-hide" id="back-btn-memo" onclick="goBack()" style="display:none;">← Назад</button>
+                    <button class="btn-icon print-hide" onclick="openHelp()" title="Справка">📖</button>
+                    <button class="btn-icon print-hide" onclick="printCurrent()" title="Сохранить в PDF">📄</button>
+                    <button class="btn-icon print-hide" onclick="toggleTheme()" title="Сменить тему">🌙</button>
+                    <button class="btn btn-text print-hide" onclick="exitToMenu()">← В меню</button>
+                </div>
+            </div>
+            <div class="memo-grid" id="memo-grid"></div>
+        </div>
+
+        <div class="screen" id="screen-glossary">
+            <div class="card">
+                <div class="card-body">
+                    <div class="lesson-header">
+                        <div class="lesson-title" id="glossary-title"></div>
+                        <div class="header-right">
+                            <button class="btn btn-text print-hide" id="back-btn-glossary" onclick="goBack()" style="display:none;">← Назад</button>
+                            <button class="btn-icon print-hide" onclick="openHelp()" title="Справка">📖</button>
+                            <button class="btn-icon print-hide" onclick="printCurrent()" title="Сохранить в PDF">📄</button>
+                            <button class="btn-icon print-hide" onclick="exportGlossaryCsv()" title="Экспорт глоссария в CSV">📊</button>
+                            <button class="btn-icon print-hide" onclick="toggleTheme()" title="Сменить тему">🌙</button>
+                            <button class="btn btn-text print-hide" onclick="exitToMenu()">← В меню</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glossary-layout">
+                <aside class="glossary-sidebar">
+                    <div class="glossary-search-wrap">
+                        <input type="text" class="glossary-search" id="glossary-search" placeholder="🔍 Поиск..." oninput="onGlossarySearch()">
+                    </div>
+                    <nav class="glossary-list" id="glossary-list"></nav>
+                </aside>
+                <div class="glossary-main">
+                    <div class="card">
+                        <div class="card-body" id="glossary-content"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="help-overlay" id="help-overlay" onclick="closeHelpIfOutside(event)">
+        <div class="help-modal" id="help-modal">
+            <button class="help-close" onclick="closeHelp()" title="Закрыть (Esc)">✕</button>
+            <div id="help-body"></div>
+        </div>
+    </div>
+
+</div><!-- /#reader-root -->
+
+<!-- ============================================================
+     РЕДАКТОР
+     ============================================================ -->
+<div id="admin-root">
+
+    <div class="status" id="status"></div>
+
+    <div class="layout">
+        <aside class="sidebar">
+
+            <div class="card">
+                <div class="card-section">
+                    <div class="section-header">
+                        <div class="section-title">Блоки курса</div>
+                        <div class="section-actions">
+                            <div class="dropdown-wrap">
+                                <button class="btn btn-outline btn-sm" onclick="toggleDropdown(event, 'add-lesson-menu')">＋ Добавить ▾</button>
+                                <div class="dropdown-menu" id="add-lesson-menu">
+                                    <button onclick="closeAllDropdowns(); addLesson('theory')">＋ Теория</button>
+                                    <button onclick="closeAllDropdowns(); addLesson('quiz')">＋ Тест</button>
+                                    <button onclick="closeAllDropdowns(); addLesson('memo')">＋ Памятка</button>
+                                    <button onclick="closeAllDropdowns(); addLesson('glossary')">＋ Глоссарий</button>
+                                </div>
+                            </div>
+                            <div class="dropdown-wrap">
+                                <button class="btn-icon" onclick="toggleDropdown(event, 'course-actions-menu')" title="Действия">⋮</button>
+                                <div class="dropdown-menu dropdown-menu-right" id="course-actions-menu">
+                                    <button onclick="closeAllDropdowns(); importLesson()">📥 Импорт блока</button>
+                                    <button onclick="closeAllDropdowns(); exportCourse()">📤 Экспорт курса</button>
+                                    <button onclick="closeAllDropdowns(); importCourse()">📥 Импорт всего курса</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="lesson-list"></div>
+                </div>
+            </div>
+
+            <div class="card" id="slides-card">
+                <div class="card-section">
+                    <div class="section-header">
+                        <div class="section-title" id="cells-section-title">Слайды блока</div>
+                        <div class="section-actions">
+                            <button class="btn btn-outline btn-sm" id="add-slide-btn" onclick="addSlide()">＋ Слайд</button>
+                        </div>
+                    </div>
+                    <div id="term-search-wrap" style="display:none;">
+                        <input type="text" class="input" id="term-search" placeholder="🔍 Поиск термина..." oninput="renderTermsList()">
+                    </div>
+                    <div id="slide-list"></div>
+                    <div class="btn-group" id="glossary-csv-btns" style="display:none;">
+                        <button class="btn btn-outline" onclick="importGlossaryCsv()" title="Загрузить термины из CSV">📥 Импорт CSV</button>
+                        <button class="btn btn-outline" onclick="exportGlossaryCsv()" title="Выгрузить термины в CSV">📤 Экспорт CSV</button>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <main class="main">
+
+            <div class="form-card">
+                <div class="form-card-header">
+                    <div class="icon-badge">⚙</div>
+                    <div class="form-card-title">Настройки курса</div>
+                </div>
+                <div class="field">
+                    <label class="field-label">Название курса</label>
+                    <input class="input" type="text" id="course-title-input" oninput="onCourseSettingsChange()">
+                </div>
+                <div class="field">
+                    <label class="field-label">Заголовок вкладки браузера</label>
+                    <input class="input" type="text" id="page-title-input" oninput="onCourseSettingsChange()">
+                </div>
+            </div>
+
+            <div class="form-card">
+                <div class="form-card-header">
+                    <div class="icon-badge">📚</div>
+                    <div class="form-card-title">Текущий блок</div>
+                </div>
+                <div class="field">
+                    <label class="field-label">Название блока (в меню курса)</label>
+                    <input class="input" type="text" id="lesson-title-input" oninput="onFieldChange()">
+                </div>
+                <div class="field">
+                    <label class="field-label">Краткое описание блока <span style="font-weight:400;color:var(--text-disabled);">(показывается в меню при наведении)</span></label>
+                    <textarea class="input" id="lesson-description-input" rows="3" placeholder="Например: Как эффективно общаться и продвигать идеи" oninput="onFieldChange()"></textarea>
+                    <div class="field-hint">Необязательно. Если пусто — в правой панели меню будет только заголовок.</div>
+                </div>
+                <div class="field">
+                    <label class="field-label">Фоновая картинка блока <span style="font-weight:400;color:var(--text-disabled);">(необязательно)</span></label>
+                    <div class="media-src-row">
+                        <input class="input media-src-input" type="text" id="lesson-cover-input" placeholder="images/cover.png  или  https://..." oninput="onFieldChange()">
+                        <button type="button" class="btn btn-outline media-file-btn" id="lesson-cover-file-btn">📁 Выбрать</button>
+                    </div>
+                    <input type="file" id="lesson-cover-file-input" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml" style="display:none;">
+                    <div class="media-progress" id="lesson-cover-progress" style="display:none;">
+                        <div class="media-progress-bar"><div class="media-progress-fill" id="lesson-cover-progress-fill"></div></div>
+                        <div class="media-progress-text" id="lesson-cover-progress-text"></div>
+                    </div>
+                    <div class="field-hint">Кладётся в <code>images/</code> рядом с <code>app.html</code>. Работает и прямая ссылка. В меню картинка станет фоном правой панели.</div>
+                    <div id="lesson-cover-preview" class="lesson-cover-preview"></div>
+                </div>
+                <div class="field">
+                    <label class="field-label">Тип блока</label>
+                    <input class="input" type="text" id="lesson-type-display" disabled>
+                </div>
+            </div>
+
+            <div id="theory-editor" style="display:none;">
+                <div class="form-card">
+                    <div class="form-card-header">
+                        <div class="icon-badge">📄</div>
+                        <div class="form-card-title">Слайд</div>
+                    </div>
+                    <div class="field">
+                        <label class="field-label">Короткое имя слайда (в сайдбаре)</label>
+                        <input class="input" type="text" id="slide-shortname-input" oninput="onFieldChange()">
+                    </div>
+                    <div class="field">
+                        <label class="field-label">Заголовок слайда</label>
+                        <input class="input" type="text" id="slide-title-input" oninput="onFieldChange()">
+                    </div>
+                </div>
+
+                <div class="form-card">
+                    <div class="form-card-header">
+                        <div class="icon-badge">✏</div>
+                        <div class="form-card-title">Содержимое слайда</div>
+                    </div>
+                    <div class="field-hint" style="margin-bottom:16px;">Кликни по любому блоку ниже — и правь прямо здесь.</div>
+                    <div id="preview-content"></div>
+                    <div class="btn-group" style="margin-top:16px;">
+                        <button class="btn btn-outline" onclick="addBlock('p')">＋ Абзац</button>
+                        <button class="btn btn-outline" onclick="addBlock('h3')">＋ Подзаголовок</button>
+                        <button class="btn btn-outline" onclick="addBlock('ul')">＋ Список</button>
+                        <button class="btn btn-outline" onclick="addBlock('quote')">＋ Выделение</button>
+                        <button class="btn btn-outline" onclick="addBlock('link')">＋ Ссылка</button>
+                        <button class="btn btn-outline" onclick="addBlock('image')">＋ 🖼 Картинка</button>
+                        <button class="btn btn-outline" onclick="addBlock('video')">＋ 🎬 Видео</button>
+                        <button class="btn btn-outline" onclick="addBlock('table')">＋ 📊 Таблица</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="memo-editor" style="display:none;">
+                <div class="form-card">
+                    <div class="form-card-header">
+                        <div class="icon-badge">📌</div>
+                        <div class="form-card-title">Ячейка памятки</div>
+                    </div>
+                    <div class="field">
+                        <label class="field-label">Заголовок ячейки (акцентный)</label>
+                        <input class="input" type="text" id="cell-title-input" oninput="onFieldChange()" placeholder="Например: ЗАКОНОДАТЕЛЬСТВО">
+                    </div>
+                </div>
+
+                <div class="form-card">
+                    <div class="form-card-header">
+                        <div class="icon-badge">✏</div>
+                        <div class="form-card-title">Содержимое ячейки</div>
+                    </div>
+                    <div class="field-hint" style="margin-bottom:16px;">Кликни по любому блоку ниже — и правь прямо здесь.</div>
+                    <div id="memo-content"></div>
+                    <div class="btn-group" style="margin-top:16px;">
+                        <button class="btn btn-outline" onclick="addMemoBlock('p')">＋ Абзац</button>
+                        <button class="btn btn-outline" onclick="addMemoBlock('h3')">＋ Подзаголовок</button>
+                        <button class="btn btn-outline" onclick="addMemoBlock('ul')">＋ Список</button>
+                        <button class="btn btn-outline" onclick="addMemoBlock('quote')">＋ Выделение</button>
+                        <button class="btn btn-outline" onclick="addMemoBlock('link')">＋ Ссылка</button>
+                        <button class="btn btn-outline" onclick="addMemoBlock('image')">＋ 🖼 Картинка</button>
+                        <button class="btn btn-outline" onclick="addMemoBlock('video')">＋ 🎬 Видео</button>
+                        <button class="btn btn-outline" onclick="addMemoBlock('table')">＋ 📊 Таблица</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="glossary-editor" style="display:none;">
+                <div class="form-card">
+                    <div class="form-card-header">
+                        <div class="icon-badge">📖</div>
+                        <div class="form-card-title">Термин</div>
+                    </div>
+                    <div class="field">
+                        <label class="field-label">Название термина</label>
+                        <input class="input" type="text" id="term-name-input" oninput="onFieldChange()" placeholder="Например: LMS (Learning Management System)">
+                    </div>
+                </div>
+
+                <div class="form-card">
+                    <div class="form-card-header">
+                        <div class="icon-badge">✏</div>
+                        <div class="form-card-title">Содержимое термина</div>
+                    </div>
+                    <div class="field-hint" style="margin-bottom:16px;">Кликни по любому блоку ниже — и правь прямо здесь.</div>
+                    <div id="term-content"></div>
+                    <div class="btn-group" style="margin-top:16px;">
+                        <button class="btn btn-outline" onclick="addTermBlock('p')">＋ Абзац</button>
+                        <button class="btn btn-outline" onclick="addTermBlock('h3')">＋ Подзаголовок</button>
+                        <button class="btn btn-outline" onclick="addTermBlock('ul')">＋ Список</button>
+                        <button class="btn btn-outline" onclick="addTermBlock('quote')">＋ Выделение</button>
+                        <button class="btn btn-outline" onclick="addTermBlock('link')">＋ Ссылка</button>
+                        <button class="btn btn-outline" onclick="addTermBlock('image')">＋ 🖼 Картинка</button>
+                        <button class="btn btn-outline" onclick="addTermBlock('video')">＋ 🎬 Видео</button>
+                        <button class="btn btn-outline" onclick="addTermBlock('table')">＋ 📊 Таблица</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="quiz-editor" style="display:none;">
+                <div class="form-card">
+                    <div class="form-card-header">
+                        <div class="icon-badge">🎲</div>
+                        <div class="form-card-title">Настройки порядка</div>
+                    </div>
+                    <div class="field-hint" style="margin-bottom:16px;">
+                        Включи, если хочешь, чтобы порядок был случайным при каждом запуске теста.
+                        Прогресс и статистика сохраняются корректно.
+                    </div>
+                    <label class="q-toggle">
+                        <input type="checkbox" id="randomize-questions" onchange="onFieldChange()">
+                        <span>Перемешивать вопросы</span>
+                    </label>
+                    <label class="q-toggle">
+                        <input type="checkbox" id="randomize-options" onchange="onFieldChange()">
+                        <span>Перемешивать варианты ответов (для вопросов с выбором)</span>
+                    </label>
+                </div>
+
+                <div class="form-card">
+                    <div class="form-card-header">
+                        <div class="icon-badge">📂</div>
+                        <div class="form-card-title">Группы вопросов</div>
+                    </div>
+                    <div class="field-hint" style="margin-bottom:16px;">Группы нужны для статистики после прохождения.</div>
+                    <div id="groups-list"></div>
+                    <div class="groups-empty" id="groups-empty" style="display:none;">Пока ни одной группы.</div>
+                    <div class="btn-group" style="margin-top:12px;">
+                        <button class="btn btn-outline" onclick="addGroup()">＋ Добавить группу</button>
+                    </div>
+                </div>
+
+                <div class="form-card">
+                    <div class="form-card-header">
+                        <div class="icon-badge">📝</div>
+                        <div class="form-card-title" id="quiz-summary">Тест: 0 вопросов</div>
+                    </div>
+                    <div class="field-hint" style="margin-bottom:20px;">
+                        Выбери тип вопроса сверху. Для «Один ответ» / «Несколько» — отметь галочками правильные.<br>
+                        Для «Соответствие» — заполни пары. Для «Карточка» — переднюю и заднюю сторону.
+                    </div>
+                    <div id="quiz-questions"></div>
+                    <div class="quiz-add-row">
+                        <button class="btn btn-primary" onclick="addQuestion()">＋ Добавить вопрос</button>
+                    </div>
+                    <div class="csv-actions-row">
+                        <button class="btn btn-outline" onclick="openCsvImport()">📥 Импорт из CSV</button>
+                        <button class="btn btn-outline" onclick="openCsvTemplates()">📄 Скачать шаблоны CSV</button>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <div class="pv-overlay" id="pv-overlay" onclick="closePreviewIfOutside(event)">
+        <div class="pv-card" id="pv-card">
+            <button class="pv-close" onclick="closePreview()" title="Закрыть (Esc)">✕</button>
+            <div class="pv-card-inner" id="pv-body"></div>
+        </div>
+    </div>
+
+    <div class="csv-overlay" id="csv-overlay" onclick="closeCsvIfOutside(event)">
+        <div class="csv-modal" id="csv-modal">
+            <button class="csv-close" onclick="closeCsvModal()" title="Закрыть (Esc)">✕</button>
+            <div id="csv-modal-body"></div>
+        </div>
+    </div>
+
+</div><!-- /#admin-root -->
+
+<script src="data.js"></script>
+<script src="shared.js"></script>
+<script src="reader.js"></script>
+<script src="admin.js"></script>
+<script src="app.js"></script>
+
+</body>
+</html>

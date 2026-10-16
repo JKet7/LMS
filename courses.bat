@@ -7,7 +7,8 @@ REM Переходим в папку, где лежит батник
 cd /d "%~dp0"
 
 set "SOURCE=_source"
-set "COURSE_FILES=admin.html admin.css admin.js index.html index.css index.js"
+set "COURSE_FILES=app.html app.css shared.js reader.js app.js"
+set "OLD_FILES=admin.html admin.css admin.js index.html index.css index.js"
 
 :menu
 cls
@@ -102,7 +103,7 @@ echo   ГОТОВО! Курс "%coursename%" создан в папке "%folder
 echo  ========================================================
 echo.
 echo  Что делать дальше:
-echo    1. Открой %foldername%\admin.html двойным кликом
+echo    1. Открой %foldername%\app.html двойным кликом
 echo    2. Наполни курс
 echo    3. Нажми "Сохранить" - обновится data.js
 echo.
@@ -113,7 +114,7 @@ goto menu
 
 :noSource
 echo  [ОШИБКА] Папка "%SOURCE%" не найдена.
-echo  Создай её и положи туда admin.html, admin.js, index.html, index.js и т.д.
+echo  Создай её и положи туда app.html, app.css, shared.js, reader.js, admin.js, app.js.
 echo.
 pause
 goto menu
@@ -151,7 +152,11 @@ echo    ОБНОВЛЕНИЕ ВСЕХ КУРСОВ
 echo  ========================================================
 echo.
 if not exist "%SOURCE%\" goto noSource2
-echo  Будут перезаписаны файлы:
+
+echo  Будут УДАЛЕНЫ старые файлы:
+echo    %OLD_FILES%
+echo.
+echo  Будут СКОПИРОВАНЫ новые файлы:
 echo    %COURSE_FILES%
 echo.
 echo  во ВСЕХ папках курсов.
@@ -189,10 +194,22 @@ goto menu
 
 :updateCourse
 set "target=%~1"
+echo.
 echo  Обновляю %target%...
+REM --- Удаляем старые файлы, если они есть ---
+for %%f in (%OLD_FILES%) do (
+    if exist "%target%\%%f" (
+        del /Q "%target%\%%f" >nul 2>nul
+        echo    - удалён старый %%f
+    )
+)
+REM --- Копируем новые файлы ---
 for %%f in (%COURSE_FILES%) do (
     if exist "%SOURCE%\%%f" (
         copy /Y "%SOURCE%\%%f" "%target%\%%f" >nul 2>nul
+        echo    + %%f
+    ) else (
+        echo    - %%f (нет в %SOURCE%)
     )
 )
 goto :eof
@@ -204,7 +221,7 @@ REM ============================================================
 (
 echo // ============================================================
 echo // ДАННЫЕ КУРСА
-echo // Редактируется через admin.html.
+echo // Редактируется через app.html (режим «Редактор»).
 echo // courseKey - уникальный ключ курса, не менять!
 echo // ============================================================
 echo.
@@ -277,6 +294,7 @@ start "" http://localhost:3000/index.html
 node server.js
 pause
 goto menu
+
 :end
 endlocal
 exit /b 0

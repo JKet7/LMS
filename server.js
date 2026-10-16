@@ -70,14 +70,20 @@ function safeJoin(root, target) {
     return b;
 }
 
-// Извлекаем папку курса из Referer: http://host/EN/admin.html -> "EN"
+// Извлекаем папку курса из Referer:
+//   http://host/EN/admin.html -> "EN"
+//   http://host/EN/app.html   -> "EN"
+//   http://host/_source/app.html -> "_source"
 function getCourseFromReferer(referer) {
     if (!referer) return null;
     try {
         const url = new URL(referer);
         const parts = url.pathname.split("/").filter(Boolean);
-        if (parts.length >= 2 && parts[parts.length - 1].startsWith("admin")) {
-            return decodeURIComponent(parts[parts.length - 2]);
+        if (parts.length >= 2) {
+            const last = parts[parts.length - 1];
+            if (last.startsWith("admin") || last.startsWith("app")) {
+                return decodeURIComponent(parts[parts.length - 2]);
+            }
         }
     } catch (e) {}
     return null;
@@ -110,7 +116,7 @@ const server = http.createServer((req, res) => {
         let course = getCourseFromReferer(req.headers.referer);
         if (!course) course = reqUrl.searchParams.get("course");
         if (!course) {
-            send(res, 400, "Не удалось определить папку курса. Открой админку через сервер (http://.../EN/admin.html).");
+            send(res, 400, "Не удалось определить папку курса. Открой редактор через сервер (http://.../EN/app.html).");
             return;
         }
 

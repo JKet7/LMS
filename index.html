@@ -338,7 +338,7 @@ function renderCourses() {
         const title = String(course.title || rawFolder).trim();
         const safeTitle = escapeHtml(title);
 
-        html += `<a class="course-card" href="${folder}/index.html">` +
+        html += `<a class="course-card" href="${folder}/app.html">` +
                 `<div class="course-title">${safeTitle}</div>` +
                 `<div class="course-link">Перейти →</div>` +
                 `</a>`;
