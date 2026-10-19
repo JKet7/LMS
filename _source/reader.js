@@ -544,45 +544,61 @@
         progressFill.style.width = (s.visited.length / slides.length) * 100 + "%";
     }
 
-   function renderTopicList() {
-    if (!topicList) return;
-    const lesson = currentLesson();
-    if (!lesson) return;
-    if (lesson.type !== "theory") return;
+    function renderTopicList() {
+        if (!topicList) return;
+        const lesson = currentLesson();
+        if (!lesson) return;
+        if (lesson.type !== "theory") return;
 
-    const s = getState(currentLessonId);
+        const s = getState(currentLessonId);
 
-    let html = "";
-    slides.forEach((slide, i) => {
-        let cls = "topic-item";
-        if (i === currentSlide) cls += " current";
-        else if (s.visited.includes(i)) cls += " visited";
+        let html = "";
+        slides.forEach((slide, i) => {
+            let cls = "topic-item";
+            if (i === currentSlide) cls += " current";
+            else if (s.visited.includes(i)) cls += " visited";
+
+            if (currentMode === "author") {
+                html += `<div class="topic-item-wrap">`;
+                html += `<button class="${cls}" onclick="goToSlide(${i})">${escapeHtml(slide.shortName || slide.title || "")}</button>`;
+                html += `<button class="topic-item-edit-btn" data-slide-idx="${i}" title="Изменить имя в меню">✎</button>`;
+                html += `<button class="topic-item-menu-btn" data-slide-idx="${i}" title="Действия">⋮</button>`;
+                html += `</div>`;
+            } else {
+                html += `<button class="${cls}" onclick="goToSlide(${i})">${escapeHtml(slide.shortName || "")}</button>`;
+            }
+        });
+        topicList.innerHTML = html;
 
         if (currentMode === "author") {
-            html += `<div class="topic-item-wrap">`;
-            html += `<button class="${cls}" onclick="goToSlide(${i})">${escapeHtml(slide.shortName || slide.title || "")}</button>`;
-            html += `<button class="topic-item-menu-btn" data-slide-idx="${i}" title="Действия">⋮</button>`;
-            html += `</div>`;
-        } else {
-            html += `<button class="${cls}" onclick="goToSlide(${i})">${escapeHtml(slide.shortName || "")}</button>`;
-        }
-    });
-    topicList.innerHTML = html;
-
-    if (currentMode === "author") {
-        topicList.querySelectorAll(".topic-item-menu-btn").forEach(btn => {
-            btn.addEventListener("click", (e) => {
-                e.stopPropagation();
-                const idx = parseInt(btn.dataset.slideIdx, 10);
-                openSlideContextMenu(e, idx);
+            topicList.querySelectorAll(".topic-item-edit-btn").forEach(btn => {
+                btn.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    const idx = parseInt(btn.dataset.slideIdx, 10);
+                    const slide = slides[idx];
+                    if (!slide) return;
+                    
+                    const newName = prompt("Короткое имя для меню (shortName):", slide.shortName || slide.title || "");
+                    if (newName !== null) {
+                        slide.shortName = newName.trim() || slide.title || "Без названия";
+                        scheduleSave();
+                        renderTopicList();
+                    }
+                });
             });
-        });
-        const addBtn = document.createElement("div");
-        addBtn.className = "add-slide-row author-only";
-        addBtn.innerHTML = `<button class="btn btn-outline btn-sm" onclick="addSlide()">＋ Слайд</button>`;
-        topicList.appendChild(addBtn);
+            topicList.querySelectorAll(".topic-item-menu-btn").forEach(btn => {
+                btn.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    const idx = parseInt(btn.dataset.slideIdx, 10);
+                    openSlideContextMenu(e, idx);
+                });
+            });
+            const addBtn = document.createElement("div");
+            addBtn.className = "add-slide-row author-only";
+            addBtn.innerHTML = `<button class="btn btn-outline btn-sm" onclick="addSlide()">＋ Слайд</button>`;
+            topicList.appendChild(addBtn);
+        }
     }
-   }
 
     function goToSlide(i) {
         currentSlide = i;
@@ -692,8 +708,7 @@
         updateProgressBar();
     }
     window.renderSlide = renderSlide;
-
-    /* ============================================================
+        /* ============================================================
        НАВИГАЦИЯ ВПЕРЁД / НАЗАД
        ============================================================ */
 
@@ -1112,13 +1127,13 @@ function renderMemo(lesson) {
 
         if (currentMode === "author") {
             // Меню ⋮ термина
-glossaryContentEl.querySelectorAll("[data-term-menu-idx]").forEach(btn => {
-    btn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        const idx = parseInt(btn.dataset.termMenuIdx, 10);
-        openTermContextMenu(e, idx);
-    });
-});
+            glossaryContentEl.querySelectorAll("[data-term-menu-idx]").forEach(btn => {
+                btn.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    const idx = parseInt(btn.dataset.termMenuIdx, 10);
+                    openTermContextMenu(e, idx);
+                });
+            });
             // Заголовок термина
             const nameInput = glossaryContentEl.querySelector(".term-name-input");
             if (nameInput) {
@@ -2160,8 +2175,7 @@ glossaryContentEl.querySelectorAll("[data-term-menu-idx]").forEach(btn => {
     window.openHelp = openHelp;
     window.closeHelp = closeHelp;
     window.closeHelpIfOutside = closeHelpIfOutside;
-
-    /* ============================================================
+        /* ============================================================
        ПРИМЕЧАНИЯ / МАРКЕРЫ — карточки и модалки (клик по .note)
        ============================================================ */
 
@@ -2268,7 +2282,17 @@ glossaryContentEl.querySelectorAll("[data-term-menu-idx]").forEach(btn => {
         requestAnimationFrame(() => card.classList.add("show"));
     }
 
-    function findMarkerText(idx, wrapEl) {
+       function findMarkerText(idx, wrapEl) {
+        // Находим все маркеры внутри этой обертки
+        const markers = wrapEl.querySelectorAll(".img-marker");
+        const marker = markers[idx];
+        
+        // Если нашли маркер, берем текст из его атрибута title
+        if (marker && marker.title) {
+            return marker.title;
+        }
+        
+        // Запасной вариант: старый способ поиска через data.js
         const container = wrapEl.closest(".slide-content, .memo-cell-body, .pv-slide-content");
         if (!container) return "";
         const wraps = Array.from(container.querySelectorAll(".img-with-markers"));
@@ -2690,9 +2714,6 @@ glossaryContentEl.querySelectorAll("[data-term-menu-idx]").forEach(btn => {
         return allLessons[currentLessonId] || null;
     }
 
- 
-
-
     /* ============================================================
        ЗАГЛУШКИ для Части 2 и 3 (будут перезаписаны ниже)
        ============================================================ */
@@ -2786,7 +2807,7 @@ glossaryContentEl.querySelectorAll("[data-term-menu-idx]").forEach(btn => {
     window.csvBackToStep1 = csvBackToStep1;
     window.csvApplyImport = csvApplyImport;
 
-       /* ============================================================
+    /* ============================================================
        АВТОСТАРТ (только если мы в читателе и это не пустой data.js)
        ============================================================ */
 
@@ -2834,8 +2855,6 @@ glossaryContentEl.querySelectorAll("[data-term-menu-idx]").forEach(btn => {
         return html;
     };
   
-
-
     /* ============================================================
        РЕНДЕР ОДНОГО РЕДАКТИРУЕМОГО БЛОКА
        ============================================================ */
@@ -2853,8 +2872,9 @@ glossaryContentEl.querySelectorAll("[data-term-menu-idx]").forEach(btn => {
             inner = `<h3 contenteditable="true" data-block-index="${index}" data-block-type="h3">${renderNotesInTextEditor(block.text || "", block.notes || [])}</h3>`;
             richToolbar = createRichToolbarHTML(index, context, itemIndex);
         } else if (block.type === "quote") {
-            inner = `<div class="quote-text" contenteditable="true" data-block-index="${index}" data-block-type="quote">${renderNotesInTextEditor(block.text || "", block.notes || [])}</div>`;
-            richToolbar = createRichToolbarHTML(index, context, itemIndex);
+            const variantClass = block.variant ? ` variant-${block.variant}` : '';
+            inner = `<div class="quote-text${variantClass}" contenteditable="true" data-block-index="${index}" data-block-type="quote">${renderNotesInTextEditor(block.text || "", block.notes || [])}</div>`;
+            richToolbar = createRichToolbarHTML(index, context, itemIndex, block);
         } else if (block.type === "ul") {
             inner = renderListEditorHTML(block, index, context, itemIndex);
         } else if (block.type === "link") {
@@ -2890,7 +2910,20 @@ glossaryContentEl.querySelectorAll("[data-term-menu-idx]").forEach(btn => {
        RICH-ПАНЕЛЬ (B/I/U/S + 🔗 + 💬)
        ============================================================ */
 
-    function createRichToolbarHTML(index, context, itemIndex) {
+    function createRichToolbarHTML(index, context, itemIndex, block) {
+        // Генерируем палитру цветов только для цитаты
+        let colorPalette = "";
+        if (block && block.type === "quote") {
+            const curColor = block.variant || "red"; // Красный (бордовый) по умолчанию
+            colorPalette = `
+                <span class="rich-sep"></span>
+                <button type="button" class="rich-color-btn c-red ${curColor === 'red' ? 'active' : ''}" data-action="quote-color" data-color="red" data-index="${index}" title="Красный"></button>
+                <button type="button" class="rich-color-btn c-green ${curColor === 'green' ? 'active' : ''}" data-action="quote-color" data-color="green" data-index="${index}" title="Зелёный"></button>
+                <button type="button" class="rich-color-btn c-blue ${curColor === 'blue' ? 'active' : ''}" data-action="quote-color" data-color="blue" data-index="${index}" title="Синий"></button>
+                <button type="button" class="rich-color-btn c-orange ${curColor === 'orange' ? 'active' : ''}" data-action="quote-color" data-color="orange" data-index="${index}" title="Оранжевый"></button>
+            `;
+        }
+
         return `
             <div class="rich-toolbar-inline" contenteditable="false">
                 <button class="rich-btn" data-action="format" data-cmd="bold" title="Жирный (Ctrl+B)">B</button>
@@ -2905,6 +2938,7 @@ glossaryContentEl.querySelectorAll("[data-term-menu-idx]").forEach(btn => {
                 <span class="rich-sep"></span>
                 <button class="rich-btn" data-action="wiki" title="Вставить wiki-ссылку">🔗</button>
                 <button class="rich-btn" data-action="note" title="Добавить примечание">💬</button>
+                ${colorPalette}
             </div>
         `;
     }
@@ -2999,67 +3033,112 @@ glossaryContentEl.querySelectorAll("[data-term-menu-idx]").forEach(btn => {
        РЕНДЕР МЕДИА (image / video) — с кнопкой "✎ Изменить"
        ============================================================ */
 
-    function renderMediaEditorHTML(block, index, type, context, itemIndex) {
-        const isImage = type === "image";
-        const src = block.src || "";
+function renderMediaEditorHTML(block, index, type, context, itemIndex) {
+    const isImage = type === "image";
+    const src = block.src || "";
 
-        let previewHtml = "";
-        if (!src) {
-            previewHtml = `<div class="media-preview-empty">Превью появится здесь</div>`;
-        } else if (isImage) {
-            const markers = Array.isArray(block.markers) ? block.markers : [];
-            if (markers.length > 0) {
-                let markersHtml = "";
-                markers.forEach((m, i) => {
-                    const x = Number(m.x) || 0;
-                    const y = Number(m.y) || 0;
-                    markersHtml += `<button type="button" class="img-marker" data-marker-idx="${i}" data-block-index="${index}" style="left:${x}%;top:${y}%;" aria-label="Примечание ${i + 1}" title="${escapeAttr(m.text || "")}"></button>`;
-                });
-                previewHtml = `<div class="img-with-markers"><img src="${escapeAttr(src)}" alt="" data-lightbox="1">${markersHtml}</div>`;
-            } else {
-                previewHtml = `<img src="${escapeAttr(src)}" alt="" loading="lazy" data-lightbox="1">`;
-            }
+    let previewHtml = "";
+    if (!src) {
+        previewHtml = `<div class="media-preview-empty">Превью появится здесь</div>`;
+    } else if (isImage) {
+               const markers = Array.isArray(block.markers) ? block.markers : [];
+        const highlights = Array.isArray(block.highlights) ? block.highlights : [];
+        
+        if (markers.length > 0 || highlights.length > 0) {
+            let innerHtml = "";
+            
+            // Рисуем рамки
+            highlights.forEach(h => {
+                const colorClass = h.color ? ` color-${h.color}` : ' color-red';
+                innerHtml += `<div class="img-highlight-box${colorClass}" style="left:${h.x}%;top:${h.y}%;width:${h.w}%;height:${h.h}%;"></div>`;
+            });
+            
+            // Рисуем маркеры
+            markers.forEach((m, i) => {
+                const x = Number(m.x) || 0;
+                const y = Number(m.y) || 0;
+                innerHtml += `<button type="button" class="img-marker" data-marker-idx="${i}" data-block-index="${index}" style="left:${x}%;top:${y}%;" aria-label="Примечание ${i + 1}" title="${escapeAttr(m.text || "")}"></button>`;
+            });
+            
+            previewHtml = `<div class="img-with-markers"><img src="${escapeAttr(src)}" alt="" data-lightbox="1">${innerHtml}</div>`;
         } else {
-            previewHtml = `<video src="${escapeAttr(src)}" controls preload="metadata"></video>`;
+            previewHtml = `<img src="${escapeAttr(src)}" alt="" loading="lazy" data-lightbox="1">`;
         }
+    } else {
+        previewHtml = `<video src="${escapeAttr(src)}" controls preload="metadata"></video>`;
+    }
 
-        // Кнопка "✎ Изменить" — раскрывает редактор медиа ниже
-        const editBtn = `
-            <button type="button" class="media-edit-overlay-btn" data-action="media-edit" data-index="${index}" data-type="${type}" data-context="${context}" data-item-index="${itemIndex}">✎ Изменить</button>
-        `;
+    // Кнопка "✎ Изменить" — раскрывает редактор медиа ниже
+    const editBtn = `
+        <button type="button" class="media-edit-overlay-btn" data-action="media-edit" data-index="${index}" data-type="${type}" data-context="${context}" data-item-index="${itemIndex}">✎ Изменить</button>
+    `;
 
-        // Скрытый редактор медиа (раскроется при клике на "✎ Изменить")
-        const editorHtml = `
-            <div class="media-editor-inline" data-media-editor="${index}" style="display:none;">
-                <div class="media-src-row">
-                    <input type="text" class="input media-src-input" data-action="media-src" data-index="${index}" value="${escapeAttr(src)}" placeholder="${isImage ? 'images/pic.png' : 'videos/lesson.mp4'}">
-                    <button type="button" class="btn btn-outline media-file-btn" data-action="media-file" data-index="${index}" data-type="${type}">📁 Выбрать</button>
+    // --- НОВОЕ: настройки размера и выравнивания для картинок ---
+    let sizeControlsHtml = "";
+    if (isImage) {
+        const curWidth = (typeof block.width === "number" && block.width >= 10 && block.width <= 100) ? block.width : 100;
+        const curAlign = (block.align === "center" || block.align === "right") ? block.align : "left";
+        sizeControlsHtml = `
+            <div class="media-size-controls" style="margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border);">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                    <span style="font-size: 13px; font-weight: 500; color: var(--text-muted); min-width: 60px;">Ширина:</span>
+                    <input type="range" min="10" max="100" step="5" value="${curWidth}" data-action="media-width" data-index="${index}" style="flex: 1;">
+                    <span class="media-width-val" data-width-val="${index}" style="font-size: 13px; font-weight: 700; color: var(--text-strong); min-width: 40px; text-align: right;">${curWidth}%</span>
                 </div>
-                <input type="file" data-media-file-input="${index}" accept="${isImage ? 'image/png,image/jpeg,image/gif,image/webp,image/svg+xml' : 'video/mp4,video/webm,video/ogg'}" style="display:none;">
-                <div class="media-progress" data-media-progress="${index}" style="display:none;">
-                    <div class="media-progress-bar"><div class="media-progress-fill" data-media-fill="${index}"></div></div>
-                    <div class="media-progress-text" data-media-text="${index}"></div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 13px; font-weight: 500; color: var(--text-muted); min-width: 60px;">Край:</span>
+                    <div class="align-btn-group" style="display: flex; gap: 4px; flex: 1;">
+                        <button type="button" class="btn btn-outline btn-sm ${curAlign === 'left' ? 'active' : ''}" data-action="media-align" data-index="${index}" data-align="left" style="flex: 1; padding: 6px; font-size: 14px;">⯇</button>
+                        <button type="button" class="btn btn-outline btn-sm ${curAlign === 'center' ? 'active' : ''}" data-action="media-align" data-index="${index}" data-align="center" style="flex: 1; padding: 6px; font-size: 14px;">≡</button>
+                        <button type="button" class="btn btn-outline btn-sm ${curAlign === 'right' ? 'active' : ''}" data-action="media-align" data-index="${index}" data-align="right" style="flex: 1; padding: 6px; font-size: 14px;">⯈</button>
+                    </div>
                 </div>
-                <div class="media-drop-zone" data-media-drop="${index}">Перетащи файл сюда</div>
-                ${isImage ? `<div class="img-marker-editor" data-marker-editor="${index}">
-                    <div class="img-marker-editor-title">🎯 Маркеры на картинке</div>
-                    <div class="img-marker-editor-hint">Клик по картинке ниже — добавить маркер. Клик по маркеру — редактировать.</div>
-                    <div class="img-marker-stage-wrap" data-marker-stage-wrap="${index}"></div>
-                    <div class="img-marker-list" data-marker-list="${index}"></div>
-                </div>` : ''}
-            </div>
-        `;
-
-        return `
-            <div class="media-editor ${isImage ? 'img-with-markers' : ''}" data-block-index="${index}">
-                <div class="media-preview media-with-edit" data-media-preview="${index}">
-                    ${previewHtml}
-                    ${editBtn}
-                </div>
-                ${editorHtml}
             </div>
         `;
     }
+
+    // Скрытый редактор медиа (раскроется при клике на "✎ Изменить")
+    const editorHtml = `
+        <div class="media-editor-inline" data-media-editor="${index}" style="display:none;">
+            <div class="media-src-row">
+                <input type="text" class="input media-src-input" data-action="media-src" data-index="${index}" value="${escapeAttr(src)}" placeholder="${isImage ? 'images/pic.png' : 'videos/lesson.mp4'}">
+                <button type="button" class="btn btn-outline media-file-btn" data-action="media-file" data-index="${index}" data-type="${type}">📁 Выбрать</button>
+            </div>
+            <input type="file" data-media-file-input="${index}" accept="${isImage ? 'image/png,image/jpeg,image/gif,image/webp,image/svg+xml' : 'video/mp4,video/webm,video/ogg'}" style="display:none;">
+            ${sizeControlsHtml}
+            <div class="media-progress" data-media-progress="${index}" style="display:none;">
+                <div class="media-progress-bar"><div class="media-progress-fill" data-media-fill="${index}"></div></div>
+                <div class="media-progress-text" data-media-text="${index}"></div>
+            </div>
+            <div class="media-drop-zone" data-media-drop="${index}">Перетащи файл сюда</div>
+            ${isImage ? `<div class="img-marker-editor" data-marker-editor="${index}">
+                <div class="img-marker-editor-title">🎯 Маркеры на картинке</div>
+                <div class="img-marker-editor-hint">Клик по картинке ниже — добавить маркер. Клик по маркеру — редактировать.</div>
+                <div class="img-marker-stage-wrap" data-marker-stage-wrap="${index}"></div>
+                <div class="img-marker-list" data-marker-list="${index}"></div>
+            </div>` : ''}
+            <!-- НОВОЕ: Блок для рамок выделения -->
+            ${isImage ? `<div class="img-highlight-editor" data-highlight-editor="${index}" style="margin-top: 12px; padding: 12px 14px; background: var(--input-bg); border: 1px solid var(--border); border-radius: var(--radius-md);">
+                <div class="img-marker-editor-title" style="display: flex; justify-content: space-between; align-items: center;">
+                    <span>🔴 Рамки выделения</span>
+                    <button type="button" class="btn btn-outline btn-sm" data-action="highlight-add" data-index="${index}" style="padding: 4px 10px; font-size: 12px;">➕ Добавить рамку</button>
+                </div>
+                <div class="img-marker-editor-hint">Нарисуй рамку мышкой прямо на превью картинки.</div>
+                <div class="img-highlight-list" data-highlight-list="${index}"></div>
+            </div>` : ''}
+        </div>
+    `;
+
+    return `
+        <div class="media-editor ${isImage ? 'img-with-markers' : ''}" data-block-index="${index}">
+            <div class="media-preview media-with-edit" data-media-preview="${index}">
+                ${previewHtml}
+                ${editBtn}
+            </div>
+            ${editorHtml}
+        </div>
+    `;
+}
 
     /* ============================================================
        РЕНДЕР ТАБЛИЦЫ — редактор
@@ -3153,6 +3232,32 @@ glossaryContentEl.querySelectorAll("[data-term-menu-idx]").forEach(btn => {
                 editable.focus();
                 document.execCommand(btn.dataset.cmd, false, null);
                 readEditableBlock(wrapper, blocks, context, itemIndex);
+                scheduleSave();
+            });
+        });
+
+        // ============ ЦВЕТА ЦИТАТЫ ============
+        container.querySelectorAll("[data-action='quote-color']").forEach(btn => {
+            btn.addEventListener("mousedown", (e) => {
+                e.preventDefault();
+                const idx = parseInt(btn.dataset.index, 10);
+                const color = btn.dataset.color;
+                if (!blocks[idx]) return;
+                
+                blocks[idx].variant = color;
+                
+                const wrapper = btn.closest(".block-wrapper-edit");
+                const quoteEl = wrapper.querySelector(".quote-text");
+                if (quoteEl) {
+                    quoteEl.className = "quote-text variant-" + color;
+                }
+                
+                const toolbar = btn.closest(".rich-toolbar-inline");
+                if (toolbar) {
+                    toolbar.querySelectorAll(".rich-color-btn").forEach(b => b.classList.remove("active"));
+                    btn.classList.add("active");
+                }
+                
                 scheduleSave();
             });
         });
@@ -3358,6 +3463,61 @@ glossaryContentEl.querySelectorAll("[data-term-menu-idx]").forEach(btn => {
             });
         });
 
+        // ============ НОВОЕ: ШИРИНА И ВЫРАВНИВАНИЕ КАРТИНКИ ============
+        container.querySelectorAll("[data-action='media-width']").forEach(input => {
+            if (input.dataset.bound) return;
+            input.dataset.bound = "1";
+            input.addEventListener("input", (e) => {
+                const idx = parseInt(input.dataset.index, 10);
+                const block = blocks[idx];
+                if (!block) return;
+                
+                const val = parseInt(e.target.value, 10);
+                block.width = val;
+                
+                const valEl = container.querySelector(`[data-width-val="${idx}"]`);
+                if (valEl) valEl.textContent = val + "%";
+                
+                const preview = container.querySelector(`[data-media-preview="${idx}"]`);
+                if (preview) {
+                    const img = preview.querySelector("img");
+                    if (img) {
+                        img.style.width = val + "%";
+                        img.style.maxWidth = "100%";
+                        img.style.height = "auto";
+                    }
+                }
+                scheduleSave();
+            });
+        });
+
+        container.querySelectorAll("[data-action='media-align']").forEach(btn => {
+            if (btn.dataset.bound) return;
+            btn.dataset.bound = "1";
+            btn.addEventListener("click", (e) => {
+                e.preventDefault();
+                const idx = parseInt(btn.dataset.index, 10);
+                const align = btn.dataset.align;
+                const block = blocks[idx];
+                if (!block) return;
+                
+                block.align = align;
+                
+                const group = btn.closest(".align-btn-group");
+                if (group) {
+                    group.querySelectorAll("button").forEach(b => b.classList.remove("active"));
+                    btn.classList.add("active");
+                }
+                
+                const preview = container.querySelector(`[data-media-preview="${idx}"]`);
+                if (preview) {
+                    preview.classList.remove("img-align-left", "img-align-center", "img-align-right");
+                    preview.classList.add("img-align-" + align);
+                }
+                scheduleSave();
+            });
+        });
+
         // ============ ТАБЛИЦЫ ============
         container.querySelectorAll("[data-action='table-input']").forEach(inp => {
             inp.addEventListener("input", () => {
@@ -3447,8 +3607,7 @@ glossaryContentEl.querySelectorAll("[data-term-menu-idx]").forEach(btn => {
         });
     };
     window.attachAuthorHandlers = attachAuthorHandlers;
-
-    /* ============================================================
+        /* ============================================================
        ВСПОМОГАТЕЛЬНЫЕ
        ============================================================ */
 
@@ -3646,7 +3805,12 @@ glossaryContentEl.querySelectorAll("[data-term-menu-idx]").forEach(btn => {
         const progressWrap = container.querySelector(`[data-media-progress='${blockIdx}']`);
         const progressFill = container.querySelector(`[data-media-fill='${blockIdx}']`);
         const progressText = container.querySelector(`[data-media-text='${blockIdx}']`);
-
+        
+        // Инициализация рамок
+        if (isImage && container.querySelector(`[data-highlight-editor='${blockIdx}']`)) {
+            setupHighlightsEditor(container, block, blockIdx);
+        }
+        
         if (srcInput && !srcInput.dataset.bound) {
             srcInput.dataset.bound = "1";
             srcInput.addEventListener("input", () => {
@@ -3699,6 +3863,262 @@ glossaryContentEl.querySelectorAll("[data-term-menu-idx]").forEach(btn => {
         }
     }
 
+    function setupHighlightsEditor(container, block, blockIdx) {
+        if (!Array.isArray(block.highlights)) block.highlights = [];
+        
+        const listBox = container.querySelector(`[data-highlight-list='${blockIdx}']`);
+        const stageWrap = container.querySelector(`[data-marker-stage-wrap='${blockIdx}']`);
+        const addBtn = container.querySelector(`[data-action='highlight-add'][data-index='${blockIdx}']`);
+        
+        if (!stageWrap || !listBox || !addBtn) return;
+        
+        let isDrawing = false;
+        let startX = 0, startY = 0;
+        let tempBox = null;
+        let activeBoxIndex = -1;
+
+        const refreshPreview = () => {
+            const previewContainer = container.querySelector(`[data-media-preview='${blockIdx}']`);
+            if (!previewContainer) return;
+            
+            // Ищем обертку, если её нет — создаем
+            let imgWrap = previewContainer.querySelector('.img-with-markers');
+            if (!imgWrap) {
+                const img = previewContainer.querySelector("img");
+                if (!img) return;
+                imgWrap = document.createElement('div');
+                imgWrap.className = 'img-with-markers';
+                img.parentNode.insertBefore(imgWrap, img);
+                imgWrap.appendChild(img);
+            }
+            
+            imgWrap.querySelectorAll('.img-highlight-box').forEach(el => el.remove());
+            
+            block.highlights.forEach((h, i) => {
+                const box = document.createElement('div');
+                const colorClass = h.color ? ` color-${h.color}` : ' color-red';
+                box.className = 'img-highlight-box' + colorClass;
+                
+                box.style.left = h.x + '%';
+                box.style.top = h.y + '%';
+                box.style.width = h.w + '%';
+                box.style.height = h.h + '%';
+                
+                if (i === activeBoxIndex) {
+                    box.classList.add('is-editing');
+                } else {
+                    box.style.pointerEvents = 'auto';
+                    box.style.cursor = 'pointer';
+                    box.onclick = (e) => {
+                        e.stopPropagation();
+                        activeBoxIndex = i;
+                        refreshPreview();
+                        renderList();
+                    };
+                }
+                imgWrap.appendChild(box);
+            });
+        };
+
+        const renderList = () => {
+            listBox.innerHTML = "";
+            if (block.highlights.length === 0) {
+                listBox.innerHTML = `<div class="img-marker-empty">Рамок пока нет.</div>`;
+            } else {
+                block.highlights.forEach((h, i) => {
+                    const row = document.createElement("div");
+                    row.className = "img-marker-item" + (i === activeBoxIndex ? " is-current" : "");
+                    if (i === activeBoxIndex) row.style.background = "var(--primary-soft)";
+                    
+                    const curColor = h.color || "red";
+                    
+                    row.innerHTML = `
+                        <div class="img-marker-item-num" style="background:#e53935;">${i + 1}</div>
+                        <div class="img-marker-item-text">
+                            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 2px;">X: ${Math.round(h.x)}%, Y: ${Math.round(h.y)}% (${Math.round(h.w)}x${Math.round(h.h)})</div>
+                            <div class="highlight-color-picker">
+                                <div class="color-dot red ${curColor === 'red' ? 'active' : ''}" data-color="red"></div>
+                                <div class="color-dot green ${curColor === 'green' ? 'active' : ''}" data-color="green"></div>
+                                <div class="color-dot orange ${curColor === 'orange' ? 'active' : ''}" data-color="orange"></div>
+                                <div class="color-dot blue ${curColor === 'blue' ? 'active' : ''}" data-color="blue"></div>
+                            </div>
+                        </div>
+                        <div class="img-marker-item-actions">
+                            <button type="button" class="mini-icon-btn del" title="Удалить">✕</button>
+                        </div>
+                    `;
+                    
+                    // Обработчик удаления
+                    row.querySelector(".mini-icon-btn").onclick = (e) => {
+                        e.stopPropagation();
+                        if (!confirm("Удалить эту рамку?")) return;
+                        block.highlights.splice(i, 1);
+                        if (activeBoxIndex === i) activeBoxIndex = -1;
+                        scheduleSave();
+                        refreshPreview();
+                        renderList();
+                    };
+                    
+                    // Обработчики выбора цвета
+                    row.querySelectorAll(".color-dot").forEach(dot => {
+                        dot.onclick = (e) => {
+                            e.stopPropagation();
+                            const newColor = dot.dataset.color;
+                            block.highlights[i].color = newColor;
+                            scheduleSave();
+                            refreshPreview();
+                            renderList();
+                        };
+                    });
+                    
+                    listBox.appendChild(row);
+                });
+            }
+        };
+
+        addBtn.onclick = (e) => {
+            e.preventDefault();
+            activeBoxIndex = -1;
+            renderList();
+            refreshPreview();
+
+            const stage = stageWrap.querySelector('.img-marker-stage');
+            if (!stage) return;
+            
+            stage.style.cursor = 'crosshair';
+            
+            const onMouseDown = (e) => {
+                if (e.target.closest('.img-marker') || e.target.closest('.img-highlight-box')) return;
+                isDrawing = true;
+                const rect = stage.getBoundingClientRect();
+                startX = ((e.clientX - rect.left) / rect.width) * 100;
+                startY = ((e.clientY - rect.top) / rect.height) * 100;
+                
+                tempBox = document.createElement('div');
+                tempBox.className = 'img-highlight-box color-red';
+                tempBox.style.left = startX + '%';
+                tempBox.style.top = startY + '%';
+                tempBox.style.width = '0%';
+                tempBox.style.height = '0%';
+                stage.appendChild(tempBox);
+            };
+            
+            const onMouseMove = (e) => {
+                if (!isDrawing || !tempBox) return;
+                const rect = stage.getBoundingClientRect();
+                const curX = ((e.clientX - rect.left) / rect.width) * 100;
+                const curY = ((e.clientY - rect.top) / rect.height) * 100;
+                
+                const w = Math.abs(curX - startX);
+                const h = Math.abs(curY - startY);
+                tempBox.style.left = Math.min(startX, curX) + '%';
+                tempBox.style.top = Math.min(startY, curY) + '%';
+                tempBox.style.width = w + '%';
+                tempBox.style.height = h + '%';
+            };
+            
+            const onMouseUp = () => {
+                if (!isDrawing) return;
+                isDrawing = false;
+                
+                if (tempBox) {
+                    const w = parseFloat(tempBox.style.width);
+                    const h = parseFloat(tempBox.style.height);
+                    if (w > 2 && h > 2) { 
+                        block.highlights.push({
+                            x: parseFloat(tempBox.style.left),
+                            y: parseFloat(tempBox.style.top),
+                            w: w,
+                            h: h,
+                            color: "red"
+                        });
+                        scheduleSave();
+                        activeBoxIndex = block.highlights.length - 1;
+                    }
+                    tempBox.remove();
+                    tempBox = null;
+                }
+                
+                stage.style.cursor = '';
+                stage.removeEventListener('mousedown', onMouseDown);
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+                
+                refreshPreview();
+                renderList();
+            };
+            
+            stage.addEventListener('mousedown', onMouseDown);
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+        };
+
+        const previewContainer = container.querySelector(`[data-media-preview='${blockIdx}']`);
+        if (previewContainer) {
+            const imgWrap = previewContainer.querySelector('.img-with-markers') || previewContainer;
+            
+                        imgWrap.addEventListener('mousedown', (e) => {
+                const activeBox = e.target.closest('.img-highlight-box.is-editing');
+                if (!activeBox || activeBoxIndex === -1) return;
+                
+                e.preventDefault();
+                e.stopPropagation();
+                
+                const h = block.highlights[activeBoxIndex];
+                if (!h) return;
+                
+                // Находим саму картинку, чтобы не учитывать рамки и отступы
+                const imgEl = imgWrap.querySelector('img') || imgWrap;
+                const rect = imgEl.getBoundingClientRect();
+                
+                let startMouseX = e.clientX;
+                let startMouseY = e.clientY;
+                const isShift = e.shiftKey; 
+                
+                // Запоминаем изначальные координаты рамки
+                const startX = h.x;
+                const startY = h.y;
+                const startW = h.w;
+                const startH = h.h;
+                
+                const onMouseMove = (ev) => {
+                    const dx = ((ev.clientX - startMouseX) / rect.width) * 100;
+                    const dy = ((ev.clientY - startMouseY) / rect.height) * 100;
+                    
+                    if (isShift) {
+                        h.w = Math.max(2, Math.min(100 - h.x, startW + dx));
+                        h.h = Math.max(2, Math.min(100 - h.y, startH + dy));
+                    } else {
+                        h.x = Math.max(0, Math.min(100 - h.w, startX + dx));
+                        h.y = Math.max(0, Math.min(100 - h.h, startY + dy));
+                    }
+                    
+                    activeBox.style.left = h.x + '%';
+                    activeBox.style.top = h.y + '%';
+                    activeBox.style.width = h.w + '%';
+                    activeBox.style.height = h.h + '%';
+                    
+                    const textEl = listBox.querySelector(`.img-marker-item:nth-child(${activeBoxIndex + 1}) .img-marker-item-text div`);
+                    if (textEl) {
+                        textEl.textContent = `X: ${Math.round(h.x)}%, Y: ${Math.round(h.y)}% (${Math.round(h.w)}x${Math.round(h.h)})`;
+                    }
+                };
+                
+                const onMouseUp = () => {
+                    document.removeEventListener('mousemove', onMouseMove);
+                    document.removeEventListener('mouseup', onMouseUp);
+                    scheduleSave();
+                };
+                
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp);
+            });
+        }
+
+        refreshPreview();
+        renderList();
+    }
+        
     function preview_update_after_upload(container, blockIdx) {
         return () => {
             // Просто перерисовываем текущий item
@@ -4850,7 +5270,7 @@ glossaryContentEl.querySelectorAll("[data-term-menu-idx]").forEach(btn => {
     };
     window.openCourseSettings = openCourseSettings;
 
-       /* ============================================================
+    /* ============================================================
        ЧАСТЬ 3 — СБОР ДАННЫХ, СОХРАНЕНИЕ, МОДАЛКИ, CSV, ФИНАЛ
        ============================================================ */
 
@@ -4943,7 +5363,20 @@ glossaryContentEl.querySelectorAll("[data-term-menu-idx]").forEach(btn => {
         // которые правятся напрямую. Никакого отдельного «сбора из формы» нет.
         // Функция оставлена как заглушка для совместимости с buildDataJs.
     }
-
+       function updateTimestamps() {
+        const now = new Date().toISOString();
+        const lesson = currentLesson();
+        if (!lesson) return;
+        
+        // Обновляем дату только у ТЕКУЩЕГО слайда/ячейки/термина
+        if (lesson.type === "theory" && lesson.slides && lesson.slides[currentSlide]) {
+            lesson.slides[currentSlide]._editedAt = now;
+        } else if (lesson.type === "memo" && lesson.cells && lesson.cells[currentSlide]) {
+            lesson.cells[currentSlide]._editedAt = now;
+        } else if (lesson.type === "glossary" && lesson.terms && lesson.terms[glossaryState.selectedTermIndex]) {
+            lesson.terms[glossaryState.selectedTermIndex]._editedAt = now;
+        }
+    }
     function buildDataJs() {
         const sJ = JSON.stringify(courseSettings, null, 4)
             .replace(/\u2028/g, "\\u2028")
@@ -5006,6 +5439,7 @@ glossaryContentEl.querySelectorAll("[data-term-menu-idx]").forEach(btn => {
         if (currentMode !== "author") return;
         clearTimeout(changeTimer);
         changeTimer = setTimeout(() => {
+            updateTimestamps(); 
             saveDraftInline();
             autoSaveToServerInline();
         }, 500);
@@ -6244,6 +6678,7 @@ glossaryContentEl.querySelectorAll("[data-term-menu-idx]").forEach(btn => {
     if (READER_AVAILABLE && currentMode === "author") {
         renderMenu();
     }
+
     /* ============================================================
        КОНТЕКСТНОЕ МЕНЮ ЯЧЕЙКИ ПАМЯТКИ
        ============================================================ */

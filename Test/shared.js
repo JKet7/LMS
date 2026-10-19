@@ -274,25 +274,47 @@ function renderNotes(html, notes) {
    ============================================================ */
 
 function renderImageBlock(b) {
-    const hasMarkers = Array.isArray(b.markers) && b.markers.length > 0;
+    const markers = Array.isArray(b.markers) ? b.markers : [];
+    const highlights = Array.isArray(b.highlights) ? b.highlights : [];
+    
     const safeSrc = escapeAttr(b.src || "");
     const safeAlt = escapeAttr(b.alt || "");
 
-    if (!hasMarkers) {
-        return `<div class="slide-media"><img src="${safeSrc}" alt="${safeAlt}" loading="lazy" data-lightbox="1"></div>`;
+    const width = (typeof b.width === "number" && b.width >= 10 && b.width <= 100) ? b.width : 100;
+    const align = (b.align === "center" || b.align === "right") ? b.align : "left";
+
+    const alignClass = `img-align-${align}`;
+    const imgStyle = width < 100 ? ` style="width:${width}%; max-width:100%; height:auto;"` : "";
+
+    // Если нет ни маркеров, ни рамок — отдаем просто картинку
+    if (markers.length === 0 && highlights.length === 0) {
+        return `<div class="slide-media ${alignClass}"><img src="${safeSrc}" alt="${safeAlt}"${imgStyle} loading="lazy" data-lightbox="1"></div>`;
     }
 
-    let html = `<div class="slide-media"><div class="img-with-markers">`;
-    html += `<img src="${safeSrc}" alt="${safeAlt}" loading="lazy" data-lightbox="1">`;
-    b.markers.forEach((m, i) => {
+    // Если есть — создаем обертку
+    let innerHtml = "";
+    
+    // Сначала добавляем рамки (они будут под маркерами)
+    highlights.forEach(h => {
+        const colorClass = h.color ? ` color-${h.color}` : ' color-red';
+        innerHtml += `<div class="img-highlight-box${colorClass}" style="left:${h.x}%; top:${h.y}%; width:${h.w}%; height:${h.h}%;"></div>`;
+    });
+
+    // Затем добавляем маркеры
+    markers.forEach((m, i) => {
         const x = Number(m.x) || 0;
         const y = Number(m.y) || 0;
-        html += `<button type="button" class="img-marker" data-marker-idx="${i}" style="left:${x}%;top:${y}%;" aria-label="Примечание ${i + 1}"></button>`;
+        // ВОТ ЗДЕСЬ МЫ ДОБАВЛЯЕМ title С ТЕКСТОМ ЗАМЕТКИ
+        innerHtml += `<button type="button" class="img-marker" data-marker-idx="${i}" style="left:${x}%;top:${y}%;" aria-label="Примечание ${i + 1}" title="${escapeAttr(m.text || "")}"></button>`;
     });
-    html += `</div></div>`;
-    return html;
-}
 
+    return `<div class="slide-media ${alignClass}">
+        <div class="img-with-markers">
+            <img src="${safeSrc}" alt="${safeAlt}"${imgStyle} loading="lazy" data-lightbox="1">
+            ${innerHtml}
+        </div>
+    </div>`;
+}
 /* ============================================================
    ССЫЛКИ — рендер блока и превью
    ============================================================ */
@@ -436,7 +458,10 @@ function renderContentBlocks(blocks) {
         if (b.type === "p") html += `<div class="text-p">${renderNotes(renderSafeText(b.text || ""), b.notes)}</div>`;
         else if (b.type === "h3") html += `<h3>${renderNotes(renderSafeText(b.text || ""), b.notes)}</h3>`;
         else if (b.type === "ul") html += renderList(b);
-        else if (b.type === "quote") html += `<div class="quote">${renderNotes(renderSafeText(b.text || ""), b.notes)}</div>`;
+                else if (b.type === "quote") {
+            const variantClass = b.variant ? ` variant-${b.variant}` : '';
+            html += `<div class="quote${variantClass}">${renderNotes(renderSafeText(b.text || ""), b.notes)}</div>`;
+        }
         else if (b.type === "link") html += renderLinkBlock(b);
         else if (b.type === "image" && b.src) html += renderImageBlock(b);
         else if (b.type === "video" && b.src) {

@@ -393,6 +393,26 @@ h1, h2, h3 { font-weight: 700; letter-spacing: 0.02em; }
     font-size: 14px;
     line-height: 1.5;
 }
+/* ===== Выравнивание и ширина картинок ===== */
+.slide-media.img-align-left { text-align: left; }
+.slide-media.img-align-center { text-align: center; }
+.slide-media.img-align-right { text-align: right; }
+
+.slide-media.img-align-center .img-with-markers,
+.slide-media.img-align-center > img {
+    display: inline-block;
+}
+.slide-media.img-align-left .img-with-markers,
+.slide-media.img-align-left > img {
+    display: block;
+    margin-right: auto;
+}
+.slide-media.img-align-right .img-with-markers,
+.slide-media.img-align-right > img {
+    display: block;
+    margin-left: auto;
+}
+
 .slide-media-error code {
     font-family: var(--font-mono);
     font-size: 12px;
@@ -1099,8 +1119,117 @@ h1, h2, h3 { font-weight: 700; letter-spacing: 0.02em; }
         display: none !important;
     }
 }
+/* Активное состояние кнопок выравнивания в редакторе медиа */
+.align-btn-group .btn.active {
+    background: var(--primary-soft);
+    border-color: var(--primary);
+    color: var(--primary);
+}
+/* ===== Рамки выделения на картинках ===== */
+.img-highlight-box {
+    position: absolute;
+    border: 3px solid #e53935; /* Красивый красный цвет */
+    border-radius: 4px;
+    pointer-events: none;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.5); /* Белая обводка для контраста на тёмном фоне */
+    z-index: 1; /* Ниже маркеров */
+    box-sizing: border-box;
+    transition: all 0.2s;
+}
+[data-theme="dark"] .img-highlight-box {
+    border-color: #ff5252;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5);
+}
+/* Активная рамка (во время редактирования) */
+.img-highlight-box.is-editing {
+    border-color: #2196f3; /* Синий цвет, чтобы отличать от сохраненной */
+    pointer-events: auto;
+    cursor: move;
+    z-index: 10;
+}
+.img-highlight-box.is-editing::before,
+.img-highlight-box.is-editing::after {
+    content: "";
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    background: #2196f3;
+    border: 1px solid #fff;
+    border-radius: 50%;
+}
+/* Уголки для ресайза */
+.img-highlight-box.is-editing::before { right: -4px; bottom: -4px; cursor: nwse-resize; }
+.img-highlight-box.is-editing::after { right: -4px; top: -4px; cursor: nesw-resize; }
+/* ===== Цвета рамок ===== */
+.img-highlight-box.color-red { border-color: #e53935; }
+.img-highlight-box.color-green { border-color: #43a047; }
+.img-highlight-box.color-orange { border-color: #fb8c00; }
+.img-highlight-box.color-blue { border-color: #1e88e5; }
 
+[data-theme="dark"] .img-highlight-box.color-red { border-color: #ff5252; }
+[data-theme="dark"] .img-highlight-box.color-green { border-color: #4caf50; }
+[data-theme="dark"] .img-highlight-box.color-orange { border-color: #ffa726; }
+[data-theme="dark"] .img-highlight-box.color-blue { border-color: #42a5f5; }
 
+/* Палитра в списке рамок */
+.highlight-color-picker {
+    display: flex;
+    gap: 4px;
+    margin-right: 8px;
+}
+.color-dot {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: transform 0.1s;
+}
+.color-dot:hover { transform: scale(1.2); }
+.color-dot.active { border-color: var(--text); }
+.color-dot.red { background: #e53935; }
+.color-dot.green { background: #43a047; }
+.color-dot.orange { background: #fb8c00; }
+.color-dot.blue { background: #1e88e5; }
+
+/* ===== Варианты цвета для цитат (quote) ===== */
+.quote.variant-red {
+    background: var(--error-bg);
+    border-left-color: var(--error);
+    color: var(--text);
+}
+.quote.variant-green {
+    background: var(--success-bg);
+    border-left-color: var(--success);
+    color: var(--text);
+}
+.quote.variant-blue {
+    background: var(--memo-accent-soft);
+    border-left-color: var(--memo-accent);
+    color: var(--text);
+}
+.quote.variant-orange {
+    background: var(--warning-bg);
+    border-left-color: var(--warning-text);
+    color: var(--text);
+}
+
+/* Палитра цветов в rich-панели */
+.rich-color-btn {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    margin: 0 2px;
+    transition: transform 0.15s;
+}
+.rich-color-btn:hover { transform: scale(1.2); }
+.rich-color-btn.active { border-color: var(--text); }
+.rich-color-btn.c-red { background: #C83B3B; }
+.rich-color-btn.c-green { background: #2D6A4F; }
+.rich-color-btn.c-blue { background: #4A6FA5; }
+.rich-color-btn.c-orange { background: #D95A1A; }
 /* ============================================================
    2. ЧИТАТЕЛЬ
    Плеер: экраны, меню курса, теория, тест, памятка, глоссарий,
@@ -3063,14 +3192,25 @@ textarea.input {
     font-family: var(--font-mono);
     font-size: 13px;
 }
-.media-preview { margin-top: 12px; }
 .media-preview img,
 .media-preview video {
     max-width: 100%;
-    max-height: 280px;
     border-radius: var(--radius-sm);
     display: block;
     background: var(--media-bg);
+}
+
+/* Ограничиваем высоту только для видео и для случая, когда нет маркеров */
+.media-preview video,
+.media-preview > img {
+    max-height: 280px;
+}
+
+/* Если картинка с маркерами — высоту не ограничиваем, чтобы координаты совпадали */
+.media-preview .img-with-markers img {
+    max-height: none;
+    width: 100%;
+    height: auto;
 }
 .media-preview-empty,
 .media-preview-error {
